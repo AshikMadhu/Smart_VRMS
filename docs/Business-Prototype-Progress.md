@@ -7,6 +7,7 @@ The user explicitly requested a usable authenticated business prototype, retaini
 - User-supplied read-only database report: migration versions 1–7, 38 application tables, no table without enabled/forced RLS, smart_vrms_api LOGIN with superuser/BYPASSRLS/CREATEROLE/CREATEDB/replication all false; legacy set_app_context(uuid,uuid) function absent.
 - User reports PASS from scripts/check-live-staff.ps1: actual confirmed staff authentication, authoritative membership, restricted JDBC/TLS and fleet read. This is user-provided live evidence, not an agent-held password or an authenticated business write test.
 - Render project URL supplied: https://dashboard.render.com/project/prj-dbf4om67bikc73c69jo0. Connected Render tools still expose the unrelated abhinavaby workspace; the user chose their own account instead. No service was created or modified through that connection. Deployment will use the user's Dashboard until access is corrected.
+- User supplied the public service URL `https://smart-vrms.onrender.com`. A read-only GET returned HTTP 200 from `/health`; a GET without credentials to `/api/v1/fleet/vehicles` returned HTTP 401, confirming the public path and protected-route boundary. These checks do not prove staff login or an authenticated company-data read.
 
 ## Implemented now
 
@@ -16,11 +17,11 @@ The user explicitly requested a usable authenticated business prototype, retaini
 - ServerMain composes the records services, probes the restricted database connection at startup, uses explicit reverse-proxy binding for hosted HTTPS and keeps unconnected booking/operations/finance services unavailable.
 - LiveFleetView + FleetHttpClient load real company categories/vehicles and permit administrator category/vehicle creation. Network work is off the EDT, late logout responses are discarded, table cells render plain text, and no mutation is automatically retried after an ambiguous timeout. Other unfinished screens remain clearly labelled read-only examples.
 - Memory-only DesktopSession serializes refresh, rejects cross-user/company refresh responses, and prevents a late refresh from undoing logout. Provider logout now explicitly affects only the current session, preserving other devices.
-- Safe GET warm-up before credentials handles free-tier wake delays. Bundled public API endpoint can be injected at build time; users will not need to type a backend address in each download once the host URL is verified.
+- Safe GET warm-up before credentials handles free-tier wake delays. The verified public API address is now the build default; users will not need to type a backend address in each download.
 - Root Dockerfile/.dockerignore for a non-root Java 17 server, complete runtime dependencies and the public provider CA only. A separate GitHub CI container build checks missing-configuration fail-closed behavior. No local software was installed.
 
 ## Verification and remaining gate
 
 New focused checks: 63 transaction-context, 20 session/host-binding, 7 atomic fleet-adapter ordering/audit escaping and 7 actual desktop/API/UI protocol checks (fixture repository/Auth for protocol tests). The latter renders verification/generated/live-fleet-1280.png; its layout was inspected and explicit column headers added. The complete revised suite passes **1,654 assertions**. Evidence: docs/evidence/release-review/business-prototype-verification.txt and docs/screenshots/live-fleet-1280.png. This still does not claim a live business write or hosted journey.
 
-Need next: verify the container build in CI; user configures the Free service's secrets privately; verify public HTTPS health, then run actual authorized/denied fleet creation/read tests with operator-owned fictional data. Only then bake the real URL into a new client release. Continue with atomic booking, customers/visits, custody/return, financial posting, private files and independent reminders; these remain mandatory and are not silently removed.
+Need next: confirm a staff member can sign in from the packaged desktop candidate and view real company fleet/category records; perform any writes only with operator-approved fictional data. Then publish the preview candidate. Continue with atomic booking, customers/visits, custody/return, financial posting, private files and independent reminders; these remain mandatory and are not silently removed.

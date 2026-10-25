@@ -16,9 +16,9 @@
 
 Smart VRMS is a Java 17 and Swing project for a rental company's fleet, people, customers and rental lifecycle. It uses a Java API with Supabase Auth and PostgreSQL, with company records and permissions enforced on the server.
 
-> **Current release: 0.1.1-preview.** This download is a read-only interface preview, not a finished rental management system. There is no hosted Java API yet. Sample data is fictional; the booking, payment, personnel, document and reporting screens are not connected end to end. Read the [independent release audit](docs/Release-Audit.md) before using it for an assessment or planning business use.
+> **Published download: 0.1.1-preview (historical).** That ZIP is still the old read-only interface preview. The hosted API is now live at `https://smart-vrms.onrender.com`; its health endpoint returns HTTP 200 and protected fleet access rejects unauthenticated requests. A new fleet-connected desktop candidate is being checked before it replaces the download. Booking, payment, return, personnel, document and reporting workflows remain incomplete. Read the [independent release audit](docs/Release-Audit.md) before relying on this prototype.
 
-Development on `main` now includes connected fleet records, transactional membership/audit checks, memory-only session refresh and a hosted server container. The [business prototype progress](docs/Business-Prototype-Progress.md) distinguishes this work from the older published preview. Hosting configuration is pending [SETUP-15](docs/SETUP-15-Render-Hosting-Manglish.md); a new client release will follow verified hosting and live acceptance, not merely the source push.
+Development on `main` includes connected fleet records, transactional membership/audit checks, memory-only session refresh and the hosted Java API. The [business prototype progress](docs/Business-Prototype-Progress.md) distinguishes this work from the older published preview. The new client candidate requires an invited staff sign-in and live fleet read check before its preview release is published.
 
 ## Download and open
 
@@ -35,12 +35,12 @@ Windows 11 x64 is the locally tested platform. The build is unsigned. macOS and 
 |---|---|
 | Native interface | Grouped navigation, gallery/detail examples, resizing and keyboard navigation |
 | Rental draft | Local required-field/date validation, vehicle shortlist, review and edit |
-| Authentication code | Strict bounded JSON/HTTP client, Supabase session adapter, JDBC membership authorization; live hosted journey still pending |
+| Staff access and fleet | Hosted API, staff authentication, company membership checks and real vehicle/category list and administrator registration paths; hosted staff sign-in is awaiting final desktop acceptance |
 | Preview modules | Read-only fictional personnel, customer, driver, custody, finance and report layouts |
 | Updates | Background notice and **Check for updates** link to a newer official stable release |
 | Windows distribution | Portable native launcher, bundled runtime, checksummed ZIP |
 
-The approved scope also includes real fleet/document history, attendance/compensation, atomic package bookings, driver eligibility, extensions, inspections/damage, immutable finance, PDFs, UPI/manual reconciliation, private storage, email/reminders, reviews and role-specific reports. These are tracked against **90 requirements**. Their source models, adapters and migrations are not proof of complete integration. The [audit](docs/Release-Audit.md) lists the unfinished connections and safety gates.
+The approved scope also includes document history, attendance/compensation, package bookings, driver eligibility, extensions, inspections/damage, finance, PDFs, UPI/manual reconciliation, private storage, email/reminders, reviews and role-specific reports. These are tracked against **90 requirements**. Their source models, adapters and migrations are not proof of complete integration. The [audit](docs/Release-Audit.md) lists the unfinished connections and safety gates.
 
 ## Updates
 

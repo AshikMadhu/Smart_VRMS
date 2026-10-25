@@ -1,4 +1,4 @@
-param([string]$Version = '0.1.1-preview')
+param([string]$Version = '0.1.2-preview')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $workspaceRoot = [IO.Path]::GetFullPath((Get-Location).Path)
@@ -11,7 +11,10 @@ function Reset-BuildFolder([string]$Relative) {
     New-Item -ItemType Directory -Path $resolved -Force | Out-Null
     return $resolved
 }
-mvn -o -B package "-Dsmart.vrms.api.url=$env:SMART_VRMS_RELEASE_API_URL"
+$apiUrl = $env:SMART_VRMS_RELEASE_API_URL
+if ([string]::IsNullOrWhiteSpace($apiUrl)) { $apiUrl = 'https://smart-vrms.onrender.com' }
+if ($apiUrl -notmatch '^https://[a-z0-9.-]+(?::\d{1,5})?/?$') { throw 'SMART_VRMS_RELEASE_API_URL must be a public HTTPS API URL without credentials, query or fragment.' }
+mvn -o -B package "-Dsmart.vrms.api.url=$apiUrl"
 if ($LASTEXITCODE -ne 0) { throw 'Maven build failed.' }
 $inputDir = Reset-BuildFolder 'dist/client-jars'
 foreach ($module in @('contracts','application','desktop')) {
@@ -27,30 +30,33 @@ $checkedRuntime = Reset-BuildFolder 'dist/runtime-win64'
 Remove-Item -LiteralPath $checkedRuntime
 & (Join-Path $jdkPath 'bin/jlink.exe') --no-header-files --no-man-pages --strip-debug --compress=2 --add-modules java.base,java.desktop,java.logging,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.charsets --output $runtimeDir
 if ($LASTEXITCODE -ne 0) { throw 'jlink failed.' }
-& (Join-Path $jdkPath 'bin/jpackage.exe') --type app-image --input $inputDir --dest $outputDir --name SmartVRMS --main-jar desktop-0.1.0-SNAPSHOT.jar --main-class in.smartvrms.desktop.DesktopMain --runtime-image $runtimeDir --app-version ($Version -split '-')[0] --vendor 'Smart VRMS' --description 'Smart VRMS interface preview - business integration incomplete'
+& (Join-Path $jdkPath 'bin/jpackage.exe') --type app-image --input $inputDir --dest $outputDir --name SmartVRMS --main-jar desktop-0.1.0-SNAPSHOT.jar --main-class in.smartvrms.desktop.DesktopMain --runtime-image $runtimeDir --app-version ($Version -split '-')[0] --vendor 'Smart VRMS' --description 'Smart VRMS connected fleet prototype - other business workflows incomplete'
 if ($LASTEXITCODE -ne 0) { throw 'jpackage failed.' }
 $image = Join-Path $outputDir 'SmartVRMS'
 Copy-Item -LiteralPath 'docs/Third-Party-Notices.md','docs/Release-Audit.md' -Destination $image
 @'
-SMART VRMS - INTERFACE PREVIEW
+SMART VRMS - CONNECTED FLEET PROTOTYPE
 
 Extract the entire archive, then open SmartVRMS.exe.
 Windows 11 x64. Java is bundled; no Java installation is needed.
 This build is unsigned. Its publisher identity is not code-signed.
 
-This is a read-only interface preview, not a finished rental system.
-Examples are fictional. Bookings, payments, staff changes, emails and exports
-are not connected end to end and cannot be saved from these screens.
-There is no hosted Java API. Supabase alone is not the application API.
-Staff login requires an operator-configured backend and an invited account.
+Staff sign-in and the vehicle/category screens use the hosted company API.
+Vehicle/category records are real company data. Use only authorized staff
+accounts and approved business data on those connected screens.
+Booking, payments, return/inspection, personnel, documents, email and reports
+are not connected end to end. Other screens show fictional examples and do not
+save changes. This is a partial prototype, not a complete rental system.
 
 Use Check for updates to find a future stable GitHub release. Installing an
 update means downloading/extracting the new archive. Already downloaded
-executables do not change automatically. Public endpoint configuration stays
-outside this folder in your profile; passwords/tokens are not saved.
+executables do not change automatically. The public API endpoint is bundled
+as a default and may be overridden in your user profile; passwords/tokens are
+never saved.
 
 Project: https://github.com/AshikMadhu/Smart_VRMS
-Read Release-Audit.md before evaluating business readiness.
+The free API host can sleep while idle; first sign-in may take about a minute.
+Read Release-Audit.md for remaining requirements before relying on the system.
 '@ | Set-Content -LiteralPath (Join-Path $image 'START-HERE.txt') -Encoding utf8
 $archive = Join-Path $workspaceRoot 'dist/SmartVRMS-Windows-x64.zip'
 if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive }

@@ -9,8 +9,8 @@ public final class PreviewSafety {
     public static JPanel readOnly(JComponent example) {
         disableActions(example);
         JPanel panel = new JPanel(new BorderLayout(0, 12));
-        panel.add(Design.card("Interface preview — fictional examples",
-                "This screen is not connected to live records. Saving, payments, exports and operational actions are unavailable."), BorderLayout.NORTH);
+        panel.add(Design.card("Example screen — not connected",
+                "This area uses fictional examples. Changes here are not saved; use the connected fleet screen for live vehicle records."), BorderLayout.NORTH);
         panel.add(example);
         return panel;
     }

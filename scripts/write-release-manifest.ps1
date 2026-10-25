@@ -5,18 +5,21 @@ $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
 $exeHash = (Get-FileHash -LiteralPath 'dist/package-win64/SmartVRMS/SmartVRMS.exe' -Algorithm SHA256).Hash
 $serverHash = (Get-FileHash -LiteralPath 'dist/server-bundle/server.jar' -Algorithm SHA256).Hash
 $archiveBytes = (Get-Item -LiteralPath $archivePath).Length
+$versionMatch = Select-String -Path 'desktop/src/main/java/in/smartvrms/desktop/infrastructure/AppVersion.java' -Pattern 'CURRENT = "([^"]+)"'
+if (-not $versionMatch) { throw 'AppVersion.CURRENT could not be read.' }
+$version = $versionMatch.Matches[0].Groups[1].Value
+if ($version -notmatch '^\d+\.\d+\.\d+-preview$') { throw 'The manifest writer only accepts an explicitly classified preview version.' }
 $manifest = @"
 # Smart VRMS release manifest
 
-Version: **0.1.1-preview**. Classification: **read-only interface preview**.
-Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED** by the independent release audit.
-The user explicitly requested pushing source and publishing a download. This authorizes preview publication; it does not establish completed business workflows.
+Version: **$version**. Classification: **authenticated fleet prototype preview**.
+Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED** by incomplete business workflows and pending authenticated hosted acceptance. The user-authorized preview release does not establish completed business workflows.
 
 | Artifact | SHA-256 | Bytes |
 |---|---|---|
 | SmartVRMS-Windows-x64.zip | $archiveHash | $archiveBytes |
 | SmartVRMS.exe | $exeHash | Native Windows launcher |
-| server.jar | $serverHash | Local server bundle; not a deployed API |
+| server.jar | $serverHash | Server build input; excluded from the desktop package |
 
 Only the client ZIP and SHA256SUMS.txt are intended as public preview assets. The server JAR is listed to identify local verification inputs; it is not bundled in the client.
 These hashes identify the build that generated this file. CI rebuilds publish their own SHA256SUMS.txt and Release-Manifest.md assets; use those release assets to verify the downloaded ZIP, not a different local build's hash.
@@ -27,8 +30,7 @@ These hashes identify the build that generated this file. CI rebuilds publish th
 | macOS Intel / Apple Silicon | PENDING RUNNER — no native device acceptance |
 | Ubuntu 24.04 GNOME x64 | PENDING RUNNER — no native device acceptance |
 
-Current source includes strict desktop JSON, pricing boundary/overflow corrections, disabled unconnected specimen actions and an official GitHub stable-release update check.
-No backend is deployed. Users can explore the interface; real booking, payment, personnel, storage, email and reporting journeys remain incomplete. See [Release-Audit.md](Release-Audit.md).
+The desktop bundle contains the public API endpoint only. User credentials and session tokens are never packaged. Fleet data is live only after staff authentication; other business workflows remain incomplete. See [Release-Audit.md](Release-Audit.md).
 The stable latest-release URL will not resolve until a stable release exists. Preview downloads use their versioned release tags. Already downloaded executables are replaced by downloading a later build.
 "@
 [IO.File]::WriteAllText((Join-Path (Get-Location) 'docs/Release-Manifest.md'),$manifest,(New-Object Text.UTF8Encoding($false)))
