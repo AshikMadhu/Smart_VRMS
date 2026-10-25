@@ -12,6 +12,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface FleetPort {
+    default List<in.smartvrms.contracts.VehicleCategoryRecord> listCategories(StaffSession session) {
+        throw new UnsupportedOperationException("Fleet categories are not configured.");
+    }
+    default in.smartvrms.contracts.VehicleCategoryRecord createCategory(StaffSession session, String code, String name) {
+        throw new UnsupportedOperationException("Fleet category management is not configured.");
+    }
     VehicleRecord registerVehicle(StaffSession session, UUID categoryId, String plate, String manufacturer, String model, int capacity, long dailyRatePaise, long hourlyRatePaise, UUID photoFileId);
     List<VehicleRecord> listVehicles(StaffSession session, String categoryCode, String status);
     Optional<VehicleRecord> getVehicle(StaffSession session, UUID vehicleId);

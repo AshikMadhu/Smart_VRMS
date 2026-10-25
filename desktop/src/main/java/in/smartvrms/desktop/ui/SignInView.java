@@ -88,13 +88,14 @@ public final class SignInView extends JPanel {
                 signIn.setText("Signing in...");
                 email.setEnabled(false);
                 password.setEnabled(false);
-                feedback.setText("Verifying staff credentials...");
+                feedback.setText("Connecting securely… first connection may take about a minute.");
                 feedback.setForeground(Design.MUTED);
 
                 new SwingWorker<SignInResult, Void>() {
                     @Override
                     protected SignInResult doInBackground() {
                         try {
+                            auth.prepareConnection();
                             return auth.signIn(emailText, passChars);
                         } finally {
                             Arrays.fill(passChars, '\0');

@@ -26,6 +26,23 @@ javac --release 17 -encoding UTF-8 -cp $serverClassPath -d verification/generate
 if ($LASTEXITCODE -ne 0) { throw 'Staff authorizer check compilation failed.' }
 java -cp "$serverClassPath;verification/generated" in.smartvrms.server.security.StaffAuthorizerChecks
 if ($LASTEXITCODE -ne 0) { throw 'Staff authorizer checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $serverClassPath -d verification/generated verification/JdbcStaffContextChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Transaction-context checks did not compile.' }
+java -cp "$serverClassPath;verification/generated" in.smartvrms.server.security.JdbcStaffContextChecks
+if ($LASTEXITCODE -ne 0) { throw 'Transaction-context checks failed.' }
+$prototypeClassPath = "$serverClassPath;desktop/target/classes"
+foreach ($prototypeCheck in @('PrototypeSessionChecks','AtomicFleetWriteChecks')) {
+    javac --release 17 -encoding UTF-8 -cp $prototypeClassPath -d verification/generated "verification/$prototypeCheck.java"
+    if ($LASTEXITCODE -ne 0) { throw 'Prototype check compilation failed.' }
+}
+java -cp "$prototypeClassPath;verification/generated" in.smartvrms.desktop.integration.PrototypeSessionChecks
+if ($LASTEXITCODE -ne 0) { throw 'Prototype session checks failed.' }
+java -cp "$prototypeClassPath;verification/generated" in.smartvrms.verification.AtomicFleetWriteChecks
+if ($LASTEXITCODE -ne 0) { throw 'Atomic fleet write checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $prototypeClassPath -d verification/generated verification/LiveFleetProtocolChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Live fleet protocol check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$prototypeClassPath;verification/generated" in.smartvrms.verification.LiveFleetProtocolChecks
+if ($LASTEXITCODE -ne 0) { throw 'Live fleet protocol checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $serverClassPath -d verification/generated verification/RuntimePasswordChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Runtime password check compilation failed.' }
 java -cp "$serverClassPath;verification/generated" RuntimePasswordChecks

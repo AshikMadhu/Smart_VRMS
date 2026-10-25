@@ -42,7 +42,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_PERSONNEL);
                 EmployeeRecord record;
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
@@ -71,13 +71,13 @@ public final class JdbcPersonnelService implements PersonnelPort {
                         );
                     }
                 }
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "EMPLOYEE_REGISTERED", "EMPLOYEE", record.id().toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("name", fullName));
                 c.commit();
-                if (auditPort != null) {
-                    auditPort.recordEvent(session, "EMPLOYEE_REGISTERED", "EMPLOYEE", record.id().toString(), "{\"name\":\"" + fullName + "\"}");
-                }
                 return record;
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to register employee", e);
             }
         } catch (SQLException e) {
@@ -103,7 +103,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_PERSONNEL);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setString(1, fullName.strip());
                     s.setString(2, contact.strip());
@@ -128,12 +128,15 @@ public final class JdbcPersonnelService implements PersonnelPort {
                             r.getObject("photo_file_id", UUID.class),
                             r.getLong("version")
                         );
+                        in.smartvrms.server.security.JdbcBusinessAudit.append(c,session,"EMPLOYEE_UPDATED","EMPLOYEE",record.id().toString(),"{}");
                         c.commit();
                         return record;
                     }
                 }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to update employee", e);
             }
         } catch (SQLException e) {
@@ -159,7 +162,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_PERSONNEL);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, employeeId);
                     s.setObject(2, session.companyId());
@@ -179,15 +182,15 @@ public final class JdbcPersonnelService implements PersonnelPort {
                             r.getObject("photo_file_id", UUID.class),
                             r.getLong("version")
                         );
+                        in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "EMPLOYEE_DEACTIVATED", "EMPLOYEE", employeeId.toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("reason", reason));
                         c.commit();
-                        if (auditPort != null) {
-                            auditPort.recordEvent(session, "EMPLOYEE_DEACTIVATED", "EMPLOYEE", employeeId.toString(), "{\"reason\":\"" + reason + "\"}");
-                        }
                         return record;
                     }
                 }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to deactivate employee", e);
             }
         } catch (SQLException e) {
@@ -209,7 +212,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_PERSONNEL);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setBoolean(2, activeOnly);
@@ -235,6 +238,8 @@ public final class JdbcPersonnelService implements PersonnelPort {
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to list employees", e);
             }
         } catch (SQLException e) {
@@ -256,7 +261,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_PERSONNEL);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setString(2, contactNumber != null ? contactNumber.strip() : "");
@@ -286,6 +291,8 @@ public final class JdbcPersonnelService implements PersonnelPort {
                 return Optional.empty();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to find duplicate employee", e);
             }
         } catch (SQLException e) {
@@ -312,7 +319,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_ATTENDANCE);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, employeeId);
@@ -323,12 +330,15 @@ public final class JdbcPersonnelService implements PersonnelPort {
                     try (ResultSet r = s.executeQuery()) {
                         if (!r.next()) throw new IllegalStateException("Failed to record attendance");
                         UUID id = r.getObject(1, UUID.class);
+                        in.smartvrms.server.security.JdbcBusinessAudit.append(c,session,"ATTENDANCE_RECORDED","ATTENDANCE",id.toString(),"{}");
                         c.commit();
                         return new AttendanceRecord(id, session.companyId(), employeeId, date, status, notes, session.userId());
                     }
                 }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to record attendance", e);
             }
         } catch (SQLException e) {
@@ -352,7 +362,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_ATTENDANCE);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, employeeId);
@@ -375,6 +385,8 @@ public final class JdbcPersonnelService implements PersonnelPort {
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to get attendance history", e);
             }
         } catch (SQLException e) {
@@ -401,7 +413,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.VIEW_COMPENSATION);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, employeeId);
@@ -412,12 +424,15 @@ public final class JdbcPersonnelService implements PersonnelPort {
                     try (ResultSet r = s.executeQuery()) {
                         if (!r.next()) throw new IllegalStateException("Failed to record compensation");
                         UUID id = r.getObject(1, UUID.class);
+                        in.smartvrms.server.security.JdbcBusinessAudit.append(c,session,"COMPENSATION_RECORDED","COMPENSATION",id.toString(),"{}");
                         c.commit();
                         return new CompensationRecord(id, session.companyId(), employeeId, arrangementType, baseRatePaise, tripAllowancePaise, effectiveFrom);
                     }
                 }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to record compensation", e);
             }
         } catch (SQLException e) {
@@ -444,7 +459,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.VIEW_COMPENSATION);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, employeeId);
@@ -468,6 +483,8 @@ public final class JdbcPersonnelService implements PersonnelPort {
                 return Optional.empty();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to get compensation", e);
             }
         } catch (SQLException e) {
@@ -475,13 +492,4 @@ public final class JdbcPersonnelService implements PersonnelPort {
         }
     }
 
-    private static void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement(
-                "SELECT set_config('vrms.user_id', ?, true), set_config('vrms.company_id', ?, true), set_config('vrms.role', ?, true)")) {
-            s.setString(1, session.userId().toString());
-            s.setString(2, session.companyId().toString());
-            s.setString(3, session.role());
-            s.execute();
-        }
-    }
 }

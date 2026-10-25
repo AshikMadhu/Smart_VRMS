@@ -25,13 +25,15 @@ public final class DesktopMain {
     }
 
     public static JPanel createContent(AuthenticationPort authPort) {
+        return createContent(authPort,new DesktopConfig(java.util.Optional.empty()));
+    }
+    public static JPanel createContent(AuthenticationPort authPort,DesktopConfig config) {
         if (!SwingUtilities.isEventDispatchThread()) throw new IllegalStateException("Build views on the EDT");
         CardLayout cards = new CardLayout();
         JPanel root = new JPanel(cards);
-        final SignInResult[] activeSession = {null};
+        var activeSession = new in.smartvrms.desktop.integration.DesktopSession(authPort);
         WorkspaceView workspace = new WorkspaceView(() -> {
-            SignInResult previous = activeSession[0];
-            activeSession[0] = null;
+            SignInResult previous = activeSession.clear();
             Object currentWorkspace = root.getClientProperty("workspace");
             if (currentWorkspace instanceof WorkspaceView current) current.setSession(null);
             cards.show(root, "signin");
@@ -41,8 +43,9 @@ public final class DesktopMain {
         });
         root.putClientProperty("workspace", workspace);
         SignInView signIn = new SignInView(authPort, result -> {
-            activeSession[0] = result;
+            activeSession.accept(result);
             workspace.setSession(result.session());
+            if(config.apiEndpoint().isPresent())workspace.connectFleet(new in.smartvrms.desktop.integration.FleetHttpClient(config,activeSession));
             cards.show(root, "workspace");
         }, () -> cards.show(root, "workspace"));
         root.add(signIn, "signin");
@@ -63,7 +66,7 @@ public final class DesktopMain {
             JFrame frame = new JFrame(title);
             frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             JPanel layout = new JPanel(new BorderLayout());
-            layout.add(createContent(auth));
+            layout.add(createContent(auth,config));
             JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             footer.add(new JLabel("Smart VRMS " + AppVersion.CURRENT + " · Interface preview"));
             JButton updates = new JButton("Check for updates");

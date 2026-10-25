@@ -11,7 +11,7 @@ function Reset-BuildFolder([string]$Relative) {
     New-Item -ItemType Directory -Path $resolved -Force | Out-Null
     return $resolved
 }
-mvn -o -B package
+mvn -o -B package "-Dsmart.vrms.api.url=$env:SMART_VRMS_RELEASE_API_URL"
 if ($LASTEXITCODE -ne 0) { throw 'Maven build failed.' }
 $inputDir = Reset-BuildFolder 'dist/client-jars'
 foreach ($module in @('contracts','application','desktop')) {

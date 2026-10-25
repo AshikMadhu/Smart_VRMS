@@ -86,6 +86,9 @@ public record DesktopConfig(Optional<URI> apiEndpoint) {
             return fromEndpoint(envVal);
         }
 
+        try(var bundled=DesktopConfig.class.getResourceAsStream("/default-api.properties")) {
+            if(bundled!=null){Properties defaults=new Properties();defaults.load(bundled);String url=defaults.getProperty("api.endpoint");if(url!=null&&!url.isBlank())return fromEndpoint(url);}
+        } catch(IOException ex) { throw new IllegalArgumentException("Could not read bundled API configuration."); }
         return new DesktopConfig(Optional.empty());
     }
 

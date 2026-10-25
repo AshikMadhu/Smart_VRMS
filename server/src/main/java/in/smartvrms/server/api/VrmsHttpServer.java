@@ -238,6 +238,7 @@ public final class VrmsHttpServer {
 
         // Stage 3 Fleet routes
         this.server.createContext("/api/v1/fleet/vehicles", exchange -> handleAuthRoute(exchange, this::handleVehicleRoute));
+        this.server.createContext("/api/v1/fleet/categories", exchange -> handleAuthRoute(exchange, this::handleFleetCategories));
         this.server.createContext("/api/v1/fleet/restrictions/freeze", exchange -> handleAuthRoute(exchange, this::handleRestrictionFreeze));
         this.server.createContext("/api/v1/fleet/restrictions/resolve", exchange -> handleAuthRoute(exchange, this::handleRestrictionResolve));
         this.server.createContext("/api/v1/fleet/documents", exchange -> handleAuthRoute(exchange, this::handleDocumentRoute));
@@ -920,6 +921,26 @@ public final class VrmsHttpServer {
     // =========================================================================
     // Stage 3: Fleet Handlers
     // =========================================================================
+
+    private void handleFleetCategories(HttpExchange exchange, String correlationId) throws Exception {
+        if(fleet==null){sendError(exchange,503,"Fleet service not configured.",correlationId);return;}
+        String token=extractBearerToken(exchange);
+        if(token==null){sendError(exchange,401,"Missing Bearer token.",correlationId);return;}
+        String method=exchange.getRequestMethod();
+        if("GET".equals(method)) {
+            StaffSession session=toStaffSession(authorizer.authorize(token,Capability.VIEW_FLEET));
+            JsonArray rows=new JsonArray();
+            for(var item:fleet.listCategories(session)) {
+                JsonObject row=new JsonObject();row.addProperty("id",item.id().toString());row.addProperty("code",item.code());row.addProperty("name",item.name());rows.add(row);
+            }
+            JsonObject root=new JsonObject();root.add("categories",rows);sendJsonResponse(exchange,200,root);
+        } else if("POST".equals(method)) {
+            StaffSession session=toStaffSession(authorizer.authorize(token,Capability.MANAGE_VEHICLE_MASTER));
+            JsonObject body=parseJsonBody(exchange);
+            var item=fleet.createCategory(session,requireStringField(body,"code"),requireStringField(body,"name"));
+            JsonObject row=new JsonObject();row.addProperty("id",item.id().toString());row.addProperty("code",item.code());row.addProperty("name",item.name());sendJsonResponse(exchange,201,row);
+        } else sendError(exchange,405,"Method not allowed.",correlationId);
+    }
 
     private void handleVehicleRoute(HttpExchange exchange, String correlationId) throws Exception {
         if (fleet == null) {

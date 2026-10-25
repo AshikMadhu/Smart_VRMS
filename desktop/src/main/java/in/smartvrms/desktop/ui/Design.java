@@ -26,7 +26,7 @@ public final class Design {
         UIManager.put("Separator.foreground",BORDER); UIManager.put("Separator.background",BORDER);
     }
     public static JLabel label(String text,int size,Color color) {
-        JLabel label=new JLabel(text); label.setFont(new Font(Font.DIALOG,Font.PLAIN,size)); label.setForeground(color); return label;
+        JLabel label=new JLabel(text); label.putClientProperty("html.disable",Boolean.TRUE); label.setFont(new Font(Font.DIALOG,Font.PLAIN,size)); label.setForeground(color); return label;
     }
     public static JPanel vertical() { return new Stack(); }
     private static final class Stack extends JPanel {

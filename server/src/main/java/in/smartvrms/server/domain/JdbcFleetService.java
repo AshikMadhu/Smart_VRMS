@@ -23,6 +23,46 @@ public final class JdbcFleetService implements FleetPort {
     }
 
     @Override
+    public List<in.smartvrms.contracts.VehicleCategoryRecord> listCategories(StaffSession session) {
+        List<in.smartvrms.contracts.VehicleCategoryRecord> result = new ArrayList<>();
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                in.smartvrms.server.security.JdbcStaffContext.require(c,session,in.smartvrms.server.security.Capability.VIEW_FLEET);
+                try (PreparedStatement query = c.prepareStatement("SELECT id,code,name FROM vrms_private.vehicle_categories WHERE company_id=? ORDER BY name")) {
+                    query.setQueryTimeout(10); query.setObject(1,session.companyId());
+                    try (ResultSet rows=query.executeQuery()) {
+                        while(rows.next()) result.add(new in.smartvrms.contracts.VehicleCategoryRecord(rows.getObject(1,UUID.class),rows.getString(2),rows.getString(3)));
+                    }
+                }
+                c.commit(); return List.copyOf(result);
+            } catch (Exception ex) { c.rollback(); throw ex; }
+        } catch (SQLException ex) { throw new IllegalStateException("Fleet categories are unavailable."); }
+    }
+
+    @Override
+    public in.smartvrms.contracts.VehicleCategoryRecord createCategory(StaffSession session,String code,String name) {
+        if(code==null || !code.matches("[A-Z][A-Z0-9_]{1,19}") || name==null || name.isBlank() || name.strip().length()>50)
+            throw new IllegalArgumentException("Use a category code of 2–20 uppercase letters/digits and a name up to 50 characters.");
+        try(Connection c=dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                in.smartvrms.server.security.JdbcStaffContext.require(c,session,in.smartvrms.server.security.Capability.MANAGE_VEHICLE_MASTER);
+                in.smartvrms.contracts.VehicleCategoryRecord record;
+                try(PreparedStatement query=c.prepareStatement("INSERT INTO vrms_private.vehicle_categories(company_id,code,name) VALUES (?,?,?) RETURNING id")) {
+                    query.setQueryTimeout(10);query.setObject(1,session.companyId());query.setString(2,code);query.setString(3,name.strip());
+                    try(ResultSet rows=query.executeQuery()) {
+                        if(!rows.next()) throw new SQLException("Category insertion failed.");
+                        record=new in.smartvrms.contracts.VehicleCategoryRecord(rows.getObject(1,UUID.class),code,name.strip());
+                    }
+                }
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c,session,"VEHICLE_CATEGORY_CREATED","VEHICLE_CATEGORY",record.id().toString(),"{}");
+                c.commit();return record;
+            } catch(Exception ex){c.rollback();throw ex;}
+        } catch(SQLException ex){throw new IllegalStateException("Category could not be saved. Check whether its code already exists.");}
+    }
+
+    @Override
     public VehicleRecord registerVehicle(StaffSession session, UUID categoryId, String plate, String manufacturer, String model, int capacity, long dailyRatePaise, long hourlyRatePaise, UUID photoFileId) {
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(categoryId, "categoryId");
@@ -44,7 +84,15 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_VEHICLE_MASTER);
+                String categoryName;
+                try(PreparedStatement categoryQuery=c.prepareStatement("SELECT name FROM vrms_private.vehicle_categories WHERE id=? AND company_id=?")) {
+                    categoryQuery.setQueryTimeout(10);categoryQuery.setObject(1,categoryId);categoryQuery.setObject(2,session.companyId());
+                    try(ResultSet categoryRows=categoryQuery.executeQuery()) {
+                        if(!categoryRows.next()) throw new IllegalArgumentException("Choose a category belonging to this company.");
+                        categoryName=categoryRows.getString(1);
+                    }
+                }
                 VehicleRecord record;
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
@@ -62,7 +110,7 @@ public final class JdbcFleetService implements FleetPort {
                             r.getObject(1, UUID.class),
                             session.companyId(),
                             categoryId,
-                            "Category",
+                            categoryName,
                             plate.strip().toUpperCase(Locale.ROOT),
                             manufacturer.strip(),
                             model.strip(),
@@ -75,13 +123,13 @@ public final class JdbcFleetService implements FleetPort {
                         );
                     }
                 }
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "VEHICLE_REGISTERED", "VEHICLE", record.id().toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("plate", plate));
                 c.commit();
-                if (auditPort != null) {
-                    auditPort.recordEvent(session, "VEHICLE_REGISTERED", "VEHICLE", record.id().toString(), "{\"plate\":\"" + plate + "\"}");
-                }
                 return record;
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to register vehicle", e);
             }
         } catch (SQLException e) {
@@ -107,7 +155,7 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.VIEW_FLEET);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setString(2, categoryCode);
@@ -137,6 +185,8 @@ public final class JdbcFleetService implements FleetPort {
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to list vehicles", e);
             }
         } catch (SQLException e) {
@@ -161,7 +211,7 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.VIEW_FLEET);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, vehicleId);
@@ -191,6 +241,8 @@ public final class JdbcFleetService implements FleetPort {
                 return Optional.empty();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to get vehicle", e);
             }
         } catch (SQLException e) {
@@ -216,7 +268,7 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.RECORD_FLEET_FREEZE);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setString(2, assetType);
@@ -227,15 +279,15 @@ public final class JdbcFleetService implements FleetPort {
                     try (ResultSet r = s.executeQuery()) {
                         if (!r.next()) throw new IllegalStateException("Failed to freeze asset");
                         UUID id = r.getObject(1, UUID.class);
+                        in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "ASSET_FROZEN", assetType, assetId.toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("reason", reason));
                         c.commit();
-                        if (auditPort != null) {
-                            auditPort.recordEvent(session, "ASSET_FROZEN", assetType, assetId.toString(), "{\"reason\":\"" + reason + "\"}");
-                        }
                         return new AssetRestrictionRecord(id, session.companyId(), assetType, assetId, "FREEZE", startTime, endTime, reason, true);
                     }
                 }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to freeze asset", e);
             }
         } catch (SQLException e) {
@@ -257,18 +309,18 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.APPROVE_MAINTENANCE_RESOLUTION);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, restrictionId);
                     s.setObject(2, session.companyId());
                     s.executeUpdate();
                 }
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "RESTRICTION_RESOLVED", "RESTRICTION", restrictionId.toString(), "{}");
                 c.commit();
-                if (auditPort != null) {
-                    auditPort.recordEvent(session, "RESTRICTION_RESOLVED", "RESTRICTION", restrictionId.toString(), "{}");
-                }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to resolve restriction", e);
             }
         } catch (SQLException e) {
@@ -294,7 +346,7 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.RENEW_ASSIGNED_DOCUMENT);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, vehicleId);
@@ -306,15 +358,15 @@ public final class JdbcFleetService implements FleetPort {
                         if (!r.next()) throw new IllegalStateException("Failed to add vehicle document");
                         UUID id = r.getObject(1, UUID.class);
                         int ver = r.getInt(2);
+                        in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "DOCUMENT_ADDED", "VEHICLE_DOC", id.toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("type", docType));
                         c.commit();
-                        if (auditPort != null) {
-                            auditPort.recordEvent(session, "DOCUMENT_ADDED", "VEHICLE_DOC", id.toString(), "{\"type\":\"" + docType + "\"}");
-                        }
                         return new VehicleDocumentRecord(id, session.companyId(), vehicleId, docType, fileId, issueDate, expiryDate, ver);
                     }
                 }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to add vehicle document", e);
             }
         } catch (SQLException e) {
@@ -338,7 +390,7 @@ public final class JdbcFleetService implements FleetPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.VIEW_FLEET);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, vehicleId);
@@ -360,6 +412,8 @@ public final class JdbcFleetService implements FleetPort {
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to get vehicle documents", e);
             }
         } catch (SQLException e) {
@@ -368,13 +422,4 @@ public final class JdbcFleetService implements FleetPort {
         return Collections.unmodifiableList(list);
     }
 
-    private static void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement(
-                "SELECT set_config('vrms.user_id', ?, true), set_config('vrms.company_id', ?, true), set_config('vrms.role', ?, true)")) {
-            s.setString(1, session.userId().toString());
-            s.setString(2, session.companyId().toString());
-            s.setString(3, session.role());
-            s.execute();
-        }
-    }
 }

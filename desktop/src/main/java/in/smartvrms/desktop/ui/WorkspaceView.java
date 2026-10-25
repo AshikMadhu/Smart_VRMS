@@ -23,6 +23,7 @@ public final class WorkspaceView extends JPanel {
     private final JButton exitButton;
     private final List<String> managementItems = List.of("Personnel", "Finance", "Reports", "Settings");
     private StaffSession session;
+    private LiveFleetView liveFleet;
 
     public WorkspaceView(Runnable signIn) {
         this(signIn, null);
@@ -75,8 +76,7 @@ public final class WorkspaceView extends JPanel {
         add(main);
 
         content.add(overview(), "Overview");
-        content.add(Design.page("Fleet", "Browse an example vehicle and carry it into a rental draft.",
-                new FleetView(candidate -> { booking.shortlist(candidate); showPage("New booking"); })), "Vehicles");
+        content.add(fleetPreview(), "Vehicles");
         content.add(Design.page("New rental", "Customer, rental period and vehicle — reviewed together before confirmation.", booking), "New booking");
         content.add(Design.page("Running services", "Fictional interface examples; operational integration is incomplete.", PreviewSafety.readOnly(runningServices)), "Running services");
         content.add(Design.page("Customers", "Fictional customer and visit examples.", PreviewSafety.readOnly(new CustomersView())), "Customers");
@@ -91,6 +91,7 @@ public final class WorkspaceView extends JPanel {
     }
 
     public void setSession(StaffSession newSession) {
+        if(liveFleet!=null){liveFleet.close();content.remove(findComponentByName(content,"Vehicles"));liveFleet=null;content.add(fleetPreview(),"Vehicles");}
         this.session = newSession;
         runningServices.setSession(newSession);
         financeView.setSession(newSession);
@@ -103,6 +104,17 @@ public final class WorkspaceView extends JPanel {
 
     public StaffSession session() {
         return session;
+    }
+
+    private JComponent fleetPreview(){
+        JPanel page=Design.page("Fleet preview","Fictional examples; sign in to load company records.",new FleetView(candidate->{booking.shortlist(candidate);showPage("New booking");}));
+        page.setName("Vehicles");return page;
+    }
+    public void connectFleet(in.smartvrms.desktop.integration.FleetHttpClient api){
+        if(session==null)throw new IllegalStateException("Staff session required.");
+        content.remove(findComponentByName(content,"Vehicles"));
+        liveFleet=new LiveFleetView(api,session);
+        JPanel page=Design.page("Company fleet","Authenticated records",liveFleet);page.setName("Vehicles");content.add(page,"Vehicles");content.revalidate();content.repaint();
     }
 
     private String sessionTitle() {

@@ -37,7 +37,7 @@ public final class JdbcDriverService implements DriverPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_DRIVER_MASTER);
                 DriverProfileRecord record;
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
@@ -55,13 +55,13 @@ public final class JdbcDriverService implements DriverPort {
                         );
                     }
                 }
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "DRIVER_REGISTERED", "DRIVER", record.id().toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("licence", licenceNumber));
                 c.commit();
-                if (auditPort != null) {
-                    auditPort.recordEvent(session, "DRIVER_REGISTERED", "DRIVER", record.id().toString(), "{\"licence\":\"" + licenceNumber + "\"}");
-                }
                 return record;
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to register driver profile", e);
             }
         } catch (SQLException e) {
@@ -86,7 +86,7 @@ public final class JdbcDriverService implements DriverPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.VIEW_DRIVER_OPERATIONS);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setString(2, dutyStatus);
@@ -114,6 +114,8 @@ public final class JdbcDriverService implements DriverPort {
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to list drivers", e);
             }
         } catch (SQLException e) {
@@ -137,19 +139,19 @@ public final class JdbcDriverService implements DriverPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_DRIVER_MASTER);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setString(1, dutyStatus);
                     s.setObject(2, driverId);
                     s.setObject(3, session.companyId());
                     s.executeUpdate();
                 }
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "DRIVER_STATUS_UPDATED", "DRIVER", driverId.toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("status", dutyStatus));
                 c.commit();
-                if (auditPort != null) {
-                    auditPort.recordEvent(session, "DRIVER_STATUS_UPDATED", "DRIVER", driverId.toString(), "{\"status\":\"" + dutyStatus + "\"}");
-                }
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException denied) throw denied;
+                if (e instanceof IllegalArgumentException invalid) throw invalid;
                 throw new RuntimeException("Failed to update driver duty status", e);
             }
         } catch (SQLException e) {
@@ -157,13 +159,4 @@ public final class JdbcDriverService implements DriverPort {
         }
     }
 
-    private static void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement(
-                "SELECT set_config('vrms.user_id', ?, true), set_config('vrms.company_id', ?, true), set_config('vrms.role', ?, true)")) {
-            s.setString(1, session.userId().toString());
-            s.setString(2, session.companyId().toString());
-            s.setString(3, session.role());
-            s.execute();
-        }
-    }
 }

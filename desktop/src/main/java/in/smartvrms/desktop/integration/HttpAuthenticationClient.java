@@ -16,6 +16,19 @@ public final class HttpAuthenticationClient implements AuthenticationPort {
     private final DesktopHttp client = new DesktopHttp();
     public HttpAuthenticationClient(DesktopConfig config) { endpoint = config.apiEndpoint().orElse(null); }
     public boolean isConfigured() { return endpoint != null; }
+    @Override public void prepareConnection() {
+        long deadline=System.nanoTime()+Duration.ofSeconds(95).toNanos();
+        while(System.nanoTime()<deadline) {
+            try {
+                var health=HttpRequest.newBuilder(endpoint.resolve("/health")).timeout(Duration.ofSeconds(70)).GET().build();
+                int status=client.send(health).status();
+                if(status==200)return;
+                if(status!=502 && status!=503 && status!=504 && status!=425)break;
+            } catch(RuntimeException ex) { if(Thread.currentThread().isInterrupted())throw ex; }
+            try { Thread.sleep(2000); } catch(InterruptedException ex) { Thread.currentThread().interrupt();throw new IllegalStateException("Connection cancelled."); }
+        }
+        throw new IllegalStateException("The service is still starting or unavailable. Try again shortly.");
+    }
     public SignInResult signIn(String email, char[] password) {
         if (email == null || email.isBlank() || password == null || password.length == 0)
             throw new IllegalArgumentException("Email and password are required.");

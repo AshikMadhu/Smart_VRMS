@@ -1,5 +1,7 @@
 # Independent release audit
 
+This records findings for the published 0.1.1-preview. Later connected-records repairs on main are recorded in Business-Prototype-Progress.md; do not treat the historical table below as a claim that those repaired source paths are still unchanged.
+
 Date: 25 October 2026, Asia/Kolkata. Version under review: 0.1.1-preview.
 
 **Production release status: BLOCKED. This package is an interface preview.** Earlier completion/readiness claims are superseded by this source-based review. A successful compile or fixture suite does not prove the deployed product works.

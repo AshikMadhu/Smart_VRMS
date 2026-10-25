@@ -203,7 +203,7 @@ public final class Stage2AIntegrationChecks {
         SupabaseConfig config = new SupabaseConfig(URL, KEY);
         boolean[] logoutCalled = { false };
         SupabaseAuth auth = new SupabaseAuth(config, r -> {
-            require(r.uri().toString().endsWith("/logout"), "logout endpoint");
+            require(r.uri().getPath().equals("/auth/v1/logout") && "scope=local".equals(r.uri().getQuery()), "logout endpoint revokes this session only");
             require(r.headers().firstValue("Authorization").orElse("").equals("Bearer eyJhbGci.eyJzdWIi.eyJpZCI"), "bearer header in logout");
             logoutCalled[0] = true;
             return new SupabaseAuth.Response(204, "application/json", new byte[0]);

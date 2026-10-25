@@ -18,6 +18,8 @@ Smart VRMS is a Java 17 and Swing project for a rental company's fleet, people, 
 
 > **Current release: 0.1.1-preview.** This download is a read-only interface preview, not a finished rental management system. There is no hosted Java API yet. Sample data is fictional; the booking, payment, personnel, document and reporting screens are not connected end to end. Read the [independent release audit](docs/Release-Audit.md) before using it for an assessment or planning business use.
 
+Development on `main` now includes connected fleet records, transactional membership/audit checks, memory-only session refresh and a hosted server container. The [business prototype progress](docs/Business-Prototype-Progress.md) distinguishes this work from the older published preview. Hosting configuration is pending [SETUP-15](docs/SETUP-15-Render-Hosting-Manglish.md); a new client release will follow verified hosting and live acceptance, not merely the source push.
+
 ## Download and open
 
 1. Open the [preview release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.1-preview).

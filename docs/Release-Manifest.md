@@ -8,7 +8,7 @@ The user explicitly requested pushing source and publishing a download. This aut
 |---|---|---|
 | SmartVRMS-Windows-x64.zip | 17680FA285BE2495616DD5D7F5E42E2C33FF07F12911B309625FF2A4DD16D7CA | 31979521 |
 | SmartVRMS.exe | 3EA489C2FDC019E66CD14B33027E400EE88C8EE7F8DA7CA93FC4F55E48D8F319 | Native Windows launcher |
-| server.jar | 65C878366A69D67D95626C570BD5F7AC159B234FF4A1EB057362F99BF09EE741 | Local server bundle; not a deployed API |
+| server.jar | 774803065D2853B85E9DF9F33F7AC325E7E6243D35DA83E44ACAF8720130C817 | Local server bundle; not a deployed API |
 
 Only the client ZIP and SHA256SUMS.txt are intended as public preview assets. The server JAR is listed to identify local verification inputs; it is not bundled in the client.
 These hashes identify the build that generated this file. CI rebuilds publish their own SHA256SUMS.txt and Release-Manifest.md assets; use those release assets to verify the downloaded ZIP, not a different local build's hash.

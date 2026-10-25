@@ -120,10 +120,10 @@ public final class SupabaseAuth {
         }
     }
 
-    /** Revoke session on provider. */
+    /** Revoke this session only; do not sign out the user's other devices. */
     public void logout(String accessToken) {
         validateTokenFormat(accessToken);
-        HttpRequest request = HttpRequest.newBuilder(config.endpoint().resolve("/auth/v1/logout"))
+        HttpRequest request = HttpRequest.newBuilder(config.endpoint().resolve("/auth/v1/logout?scope=local"))
                 .timeout(Duration.ofSeconds(15))
                 .header("apikey", config.publishableKey())
                 .header("Authorization", "Bearer " + accessToken)

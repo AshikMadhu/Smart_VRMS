@@ -48,9 +48,20 @@ public final class ServerMain {
         }
 
         try {
+            try(var connection=dataSource.getConnection()) {
+                connection.setReadOnly(true);connection.setAutoCommit(false);
+                try(var query=connection.prepareStatement("SELECT current_user='smart_vrms_api' AND NOT rolsuper AND NOT rolbypassrls AND NOT rolcreaterole AND NOT rolcreatedb FROM pg_roles WHERE rolname=current_user")) {
+                    query.setQueryTimeout(10);
+                    try(var row=query.executeQuery()){if(!row.next()||!row.getBoolean(1))throw new IllegalStateException("Restricted database role is required.");}
+                } finally {connection.rollback();}
+            }
             SupabaseAuth auth = new SupabaseAuth(supabaseConfig);
             StaffAuthorizer authorizer = new StaffAuthorizer(auth, dataSource);
-            VrmsHttpServer server = new VrmsHttpServer(new HttpServerConfig(port), auth, authorizer);
+            VrmsHttpServer server = new VrmsHttpServer(HttpServerConfig.fromEnvironment(System.getenv()), auth, authorizer::authorize,
+                    null,null,null,null,
+                    new in.smartvrms.server.domain.JdbcPersonnelService(dataSource,null),
+                    new in.smartvrms.server.domain.JdbcFleetService(dataSource,null),
+                    new in.smartvrms.server.domain.JdbcDriverService(dataSource,null),null);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOG.info("Shutdown signal received; stopping VrmsHttpServer...");
@@ -60,7 +71,7 @@ public final class ServerMain {
             server.start();
             LOG.info("Smart VRMS API listening on " + server.baseUri());
         } catch (Exception ex) {
-            System.err.println("Failed to start Smart VRMS API server: " + ex.getMessage());
+            System.err.println("Failed to start Smart VRMS API. Check restricted database credentials, CA certificate, provider URL and port; no credentials are logged.");
             System.exit(1);
         }
     }
