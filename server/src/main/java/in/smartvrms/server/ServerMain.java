@@ -10,6 +10,7 @@ import org.postgresql.ds.PGSimpleDataSource;
 import javax.sql.DataSource;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
@@ -47,14 +48,17 @@ public final class ServerMain {
             return;
         }
 
+        String startupPhase = "restricted database connection";
         try {
             try(var connection=dataSource.getConnection()) {
+                startupPhase = "restricted database role verification";
                 connection.setReadOnly(true);connection.setAutoCommit(false);
                 try(var query=connection.prepareStatement("SELECT current_user='smart_vrms_api' AND NOT rolsuper AND NOT rolbypassrls AND NOT rolcreaterole AND NOT rolcreatedb FROM pg_roles WHERE rolname=current_user")) {
                     query.setQueryTimeout(10);
                     try(var row=query.executeQuery()){if(!row.next()||!row.getBoolean(1))throw new IllegalStateException("Restricted database role is required.");}
                 } finally {connection.rollback();}
             }
+            startupPhase = "API initialization";
             SupabaseAuth auth = new SupabaseAuth(supabaseConfig);
             StaffAuthorizer authorizer = new StaffAuthorizer(auth, dataSource);
             VrmsHttpServer server = new VrmsHttpServer(HttpServerConfig.fromEnvironment(System.getenv()), auth, authorizer::authorize,
@@ -71,9 +75,26 @@ public final class ServerMain {
             server.start();
             LOG.info("Smart VRMS API listening on " + server.baseUri());
         } catch (Exception ex) {
-            System.err.println("Failed to start Smart VRMS API. Check restricted database credentials, CA certificate, provider URL and port; no credentials are logged.");
+            System.err.println("Failed to start Smart VRMS API during " + startupPhase + safeFailureCategory(ex)
+                    + ". Check the matching Render setting; credentials and provider error messages are not logged.");
             System.exit(1);
         }
+    }
+
+    /** Exposes enough diagnostic detail to distinguish connection, TLS, and authorization failures without leaking messages. */
+    private static String safeFailureCategory(Throwable failure) {
+        String sqlState = null;
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof javax.net.ssl.SSLException) return " (TLS certificate or handshake failure)";
+            if (current instanceof java.net.ConnectException) return " (connection refused)";
+            if (current instanceof java.net.SocketTimeoutException) return " (connection timed out)";
+            if (sqlState == null && current instanceof SQLException sqlException) {
+                sqlState = sqlException.getSQLState();
+            }
+        }
+        if (sqlState != null && !sqlState.isBlank()) return " (JDBC SQLSTATE " + sqlState + ")";
+        if (failure instanceof SQLException) return " (JDBC failure)";
+        return " (" + failure.getClass().getSimpleName() + ")";
     }
 
     private static SupabaseConfig loadSupabaseConfig() {
