@@ -1,6 +1,6 @@
 # Connected business prototype — current development state
 
-The user explicitly requested a usable authenticated business prototype, retaining the original full scope. This is the next connected increment, not a claim that all 90 requirements or the full rental lifecycle are finished. The published 0.1.1-preview asset remains historical; no new release tag has been created for this development work.
+The user explicitly requested a usable authenticated business prototype, retaining the original full scope. Preview `0.1.2-preview` is published at https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.2-preview. SETUP-16 operator acceptance confirmed staff sign-in and a live fleet read from the packaged client. This does not establish that all 90 requirements or the full rental lifecycle are finished; 0.1.1-preview remains a historical interface-only download.
 
 ## Live setup facts received
 
@@ -8,6 +8,7 @@ The user explicitly requested a usable authenticated business prototype, retaini
 - User reports PASS from scripts/check-live-staff.ps1: actual confirmed staff authentication, authoritative membership, restricted JDBC/TLS and fleet read. This is user-provided live evidence, not an agent-held password or an authenticated business write test.
 - Render project URL supplied: https://dashboard.render.com/project/prj-dbf4om67bikc73c69jo0. Connected Render tools still expose the unrelated abhinavaby workspace; the user chose their own account instead. No service was created or modified through that connection. Deployment will use the user's Dashboard until access is corrected.
 - User supplied the public service URL `https://smart-vrms.onrender.com`. A read-only GET returned HTTP 200 from `/health`; a GET without credentials to `/api/v1/fleet/vehicles` returned HTTP 401, confirming the public path and protected-route boundary. These checks do not prove staff login or an authenticated company-data read.
+- SETUP-16 completed by the user: packaged 0.1.2-preview staff sign-in PASS and fleet screen loaded company rows. This is read acceptance; no live registration/write or broader workflow was performed.
 
 ## Implemented now
 
@@ -24,4 +25,4 @@ The user explicitly requested a usable authenticated business prototype, retaini
 
 New focused checks: 63 transaction-context, 20 session/host-binding, 7 atomic fleet-adapter ordering/audit escaping and 7 actual desktop/API/UI protocol checks (fixture repository/Auth for protocol tests). The latter renders verification/generated/live-fleet-1280.png; its layout was inspected and explicit column headers added. The complete revised suite passes **1,654 assertions**. Evidence: docs/evidence/release-review/business-prototype-verification.txt and docs/screenshots/live-fleet-1280.png. This still does not claim a live business write or hosted journey.
 
-Need next: confirm a staff member can sign in from the packaged desktop candidate and view real company fleet/category records; perform any writes only with operator-approved fictional data. Then publish the preview candidate. Continue with atomic booking, customers/visits, custody/return, financial posting, private files and independent reminders; these remain mandatory and are not silently removed.
+Need next: exercise authenticated fleet registration and authorization denial with operator-approved fictional data, then continue with atomic booking, customers/visits, custody/return, financial posting, private files and independent reminders. These remain mandatory and are not silently removed.

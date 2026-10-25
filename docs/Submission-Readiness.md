@@ -1,6 +1,6 @@
 # Current status correction
 
-The independent source audit supersedes earlier readiness claims below. **PRODUCTION BLOCKED; read-only interface preview only.** The historical fixture suites do not establish connected end-to-end journeys, a live restore, laptop-off delivery or a deployed API. See docs/Release-Audit.md for current evidence and blockers.
+Current public preview is `0.1.2-preview`: hosted staff sign-in and real fleet reading passed operator acceptance. **Production remains blocked** because booking, return, financial, personnel, file, email and reporting journeys are not fully connected and the independent production gates remain open. The readiness notes below are historical and must not override the current audit or 90-item traceability matrix. See docs/Release-Audit.md and docs/Business-Prototype-Progress.md for current evidence and blockers.
 
 # Smart VRMS — Submission Readiness & Integration Review (Stage 8)
 
