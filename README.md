@@ -8,7 +8,7 @@
 ![Windows](https://img.shields.io/badge/Preview-Windows%2011%20x64-2b5b68?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Interface%20preview-d08b36?style=flat-square)
 
-[Download Windows preview](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.1-preview) · [Release audit](docs/Release-Audit.md) · [Requirements](planning/Requirements-and-Verification.csv)
+[Download Windows prototype](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.2-preview) · [Release audit](docs/Release-Audit.md) · [Requirements](planning/Requirements-and-Verification.csv)
 
 </div>
 
@@ -16,16 +16,16 @@
 
 Smart VRMS is a Java 17 and Swing project for a rental company's fleet, people, customers and rental lifecycle. It uses a Java API with Supabase Auth and PostgreSQL, with company records and permissions enforced on the server.
 
-> **Published download: 0.1.1-preview (historical).** That ZIP is still the old read-only interface preview. The hosted API is now live at `https://smart-vrms.onrender.com`; its health endpoint returns HTTP 200 and protected fleet access rejects unauthenticated requests. A new fleet-connected desktop candidate is being checked before it replaces the download. Booking, payment, return, personnel, document and reporting workflows remain incomplete. Read the [independent release audit](docs/Release-Audit.md) before relying on this prototype.
+> **Current preview: 0.1.2-preview.** Invited staff sign-in and fleet reading have passed hosted acceptance. Administrators can register categories and vehicles. Booking, payment, return, personnel, document, email and reporting workflows remain incomplete; do not treat this as a complete rental system. Read the [independent release audit](docs/Release-Audit.md) before relying on this prototype.
 
-Development on `main` includes connected fleet records, transactional membership/audit checks, memory-only session refresh and the hosted Java API. The [business prototype progress](docs/Business-Prototype-Progress.md) distinguishes this work from the older published preview. The new client candidate requires an invited staff sign-in and live fleet read check before its preview release is published.
+Development on `main` includes connected fleet records, transactional membership/audit checks, memory-only session refresh and the hosted Java API. The [business prototype progress](docs/Business-Prototype-Progress.md) distinguishes this preview from the remaining rental lifecycle work.
 
 ## Download and open
 
-1. Open the [preview release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.1-preview).
+1. Open the [0.1.2 preview release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.2-preview).
 2. Download **SmartVRMS-Windows-x64.zip** and optionally **SHA256SUMS.txt**.
 3. Extract the **entire archive**; open `SmartVRMS/SmartVRMS.exe`.
-4. Choose **Explore interface preview**. Java is bundled; no separate installation is needed.
+4. Sign in with an invited staff account. The first request may take about a minute if the free API has been idle. Java is bundled; no separate installation is needed. Do not enter database or Supabase keys in the app.
 
 Windows 11 x64 is the locally tested platform. The build is unsigned. macOS and Linux scripts are present, but packages have not been built and tested on those systems. Staff sign-in needs an operator-configured API and an invited account; downloading the app does not create an account or grant access to company records.
 

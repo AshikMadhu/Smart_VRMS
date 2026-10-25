@@ -13,7 +13,7 @@ $manifest = @"
 # Smart VRMS release manifest
 
 Version: **$version**. Classification: **authenticated fleet prototype preview**.
-Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED** by incomplete business workflows and pending authenticated hosted acceptance. The user-authorized preview release does not establish completed business workflows.
+Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED** by incomplete business workflows. Operator acceptance confirmed hosted staff sign-in and fleet reading; this does not establish completion of the remaining rental workflows.
 
 | Artifact | SHA-256 | Bytes |
 |---|---|---|

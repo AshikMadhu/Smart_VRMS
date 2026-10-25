@@ -1,10 +1,10 @@
 # User guide — 0.1.2-preview candidate
 
-This candidate connects staff sign-in and the fleet category/vehicle screen to the hosted company API. It is not the complete rental system. Booking, payments, returns, personnel, documents, email and reports remain unavailable or fictional examples. See Release-Audit.md for current limitations. The published 0.1.1-preview download is older and does not connect to the hosted API.
+Staff sign-in and the fleet category/vehicle screen connect to the hosted company API; hosted sign-in and fleet reading passed operator acceptance. This is not the complete rental system. Booking, payments, returns, personnel, documents, email and reports remain unavailable or fictional examples. See Release-Audit.md for current limitations. The older 0.1.1-preview download does not connect to the hosted API.
 
 ## Open the preview
 
-For this candidate check, use the provided 0.1.2-preview candidate ZIP, extract the entire archive, and open SmartVRMS/SmartVRMS.exe. Java is bundled. Windows 11 x64 is the tested target; the package is unsigned. The candidate connects to `https://smart-vrms.onrender.com` by default.
+Download the 0.1.2-preview ZIP from the versioned GitHub release, extract the entire archive, and open SmartVRMS/SmartVRMS.exe. Java is bundled. Windows 11 x64 is the tested target; the package is unsigned. The app connects to `https://smart-vrms.onrender.com` by default.
 
 ![Staff sign-in preview](screenshots/signin-1280.png)
 
