@@ -11,6 +11,7 @@ The user explicitly requested pushing source and publishing a download. This aut
 | server.jar | 65C878366A69D67D95626C570BD5F7AC159B234FF4A1EB057362F99BF09EE741 | Local server bundle; not a deployed API |
 
 Only the client ZIP and SHA256SUMS.txt are intended as public preview assets. The server JAR is listed to identify local verification inputs; it is not bundled in the client.
+These hashes identify the build that generated this file. CI rebuilds publish their own SHA256SUMS.txt and Release-Manifest.md assets; use those release assets to verify the downloaded ZIP, not a different local build's hash.
 
 | Platform | Evidence |
 |---|---|

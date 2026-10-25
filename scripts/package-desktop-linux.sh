@@ -22,10 +22,12 @@ rm -rf "${RUNTIME_DIR}"
 cp contracts/target/contracts-0.1.0-SNAPSHOT.jar "${INPUT_DIR}/"
 cp application/target/application-0.1.0-SNAPSHOT.jar "${INPUT_DIR}/"
 cp desktop/target/desktop-0.1.0-SNAPSHOT.jar "${INPUT_DIR}/"
+cp "${HOME}/.m2/repository/com/google/code/gson/gson/2.15.0/gson-2.15.0.jar" "${INPUT_DIR}/"
+cp "${HOME}/.m2/repository/com/google/errorprone/error_prone_annotations/2.50.0/error_prone_annotations-2.50.0.jar" "${INPUT_DIR}/"
 
 # Build minimal runtime
 jlink --no-header-files --no-man-pages --strip-debug --compress=2 \
-      --add-modules java.base,java.desktop,java.logging,java.net.http,java.sql,java.xml \
+      --add-modules java.base,java.desktop,java.logging,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.charsets \
       --output "${RUNTIME_DIR}"
 
 # Run jpackage to produce .deb package
@@ -37,7 +39,7 @@ jpackage \
     --main-jar "desktop-0.1.0-SNAPSHOT.jar" \
     --main-class "in.smartvrms.desktop.DesktopMain" \
     --runtime-image "${RUNTIME_DIR}" \
-    --app-version "0.1.0" \
+    --app-version "0.1.1" \
     --vendor "Smart VRMS Team" \
     --copyright "Copyright 2026 Smart VRMS" \
     --description "Smart VRMS - Professional Vehicle Rental Management System" \
