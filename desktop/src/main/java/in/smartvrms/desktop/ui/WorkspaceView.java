@@ -130,18 +130,18 @@ public final class WorkspaceView extends JPanel {
     }
 
     private JComponent fleetPreview(){
-        JPanel page=Design.page("Fleet preview","Fictional examples; sign in to load company records.",new FleetView(candidate->{booking.shortlist(candidate);showPage("New booking");}));
+        JPanel page=Design.page("Fleet preview","10 fictional vehicles · sample references are not valid registrations.",new FleetView(candidate->{booking.shortlist(candidate);showPage("New booking");}));
         page.setName("Vehicles");return page;
     }
 
     private JComponent customersPreview() {
-        JPanel page = Design.page("Customers", "Preview mode; sign in to search company customer records.", PreviewSafety.readOnly(new CustomersView()));
+        JPanel page = Design.page("Customer examples", "10 fictional customer profiles with masked contact details.", PreviewSafety.readOnly(new CustomersView()));
         page.setName("Customers");
         return page;
     }
 
     private JComponent driversPreview() {
-        JPanel page = Design.page("Drivers", "Fictional driver examples.", PreviewSafety.readOnly(new DriversView(session)));
+        JPanel page = Design.page("Driver examples", "10 fictional operational profiles; no licence numbers are included.", PreviewSafety.readOnly(new DriversView(session)));
         page.setName("Drivers");
         return page;
     }
@@ -267,11 +267,25 @@ public final class WorkspaceView extends JPanel {
                 section.setName(item);
                 content.add(section, item);
             } else {
-                content.add(unavailable(item), item);
+                content.add(demoManagementSection(item), item);
             }
         }
         content.revalidate();
         content.repaint();
+    }
+
+    private JComponent demoManagementSection(String name) {
+        JComponent page=switch(name) {
+            case "Personnel" -> Design.page("Personnel examples","10 fictional team members · no compensation or attendance is recorded.",
+                    PreviewSafety.readOnly(new PersonnelView(null)));
+            case "Finance" -> Design.page("Finance examples","10 sample payments and invoices · illustrative INR totals only.",
+                    PreviewSafety.readOnly(financeView));
+            case "Reports" -> Design.page("Reviews & report examples","10 fictional reviews · no message delivery or live report is simulated.",
+                    PreviewSafety.readOnly(automationReportsView));
+            default -> unavailable(name);
+        };
+        page.setName(name);
+        return page;
     }
 
 

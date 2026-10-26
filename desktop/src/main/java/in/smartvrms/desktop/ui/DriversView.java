@@ -32,17 +32,15 @@ public final class DriversView extends JPanel {
         setOpaque(false);
 
         // Header privacy notice
-        JPanel noticeCard = Design.card("Driver Operational Profiles", "Driver master repository and availability status (FR-DRV-001, FR-DRV-003).");
-        noticeCard.add(Design.note("PRIVACY GUARANTEE: Operational driver projections strictly exclude salary, compensation arrangements, and company margin data (FR-ACC-003, FR-DRV-001)."));
+        JPanel noticeCard = Design.card("Driver Operational Profiles", "10 fictional driver examples · no records are saved.");
+        noticeCard.add(Design.note("Sample duty and licence classes are illustrative. No licence numbers or personal contact details are shown. Live company data appears after staff sign-in."));
         add(noticeCard, BorderLayout.NORTH);
 
         // Left Panel: Driver list
         JPanel leftPanel = Design.vertical();
         JPanel rosterCard = Design.card("Operational Driver Roster", "Available and assigned drivers.");
 
-        driverListModel.addElement("Deepak Kumar • LMV, HMV • 8 Yrs • AVAILABLE");
-        driverListModel.addElement("Suresh Varma • LMV • 5 Yrs • ON_DUTY");
-        driverListModel.addElement("Manoj George • LMV, TRANS • 12 Yrs • ON_LEAVE");
+        DemoData.DRIVERS.forEach(d -> driverListModel.addElement(d.name()+" • "+d.licenceClasses()+" • "+d.yearsExperience()+" Yrs • "+d.dutyStatus()));
 
         driverList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         driverList.setFixedCellHeight(44);
@@ -78,8 +76,7 @@ public final class DriversView extends JPanel {
                 return;
             }
             String selectedStatus = (String) newDutyStatus.getSelectedItem();
-            currentDutyStatus.setText("Status: " + selectedStatus);
-            updateFeedback.setText("Duty status updated to " + selectedStatus);
+            updateFeedback.setText("Demo only — duty status was not changed or saved.");
         });
 
         detailCard.add(Design.row(updateStatusBtn, updateFeedback));

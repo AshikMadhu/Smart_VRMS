@@ -6,25 +6,25 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.util.function.Consumer;
 
-/** Local design specimens, kept separate from persisted fleet records. */
+/** Read-only design specimens, kept separate from persisted fleet records. */
 public final class FleetView extends JPanel {
-    private static final String[] NAMES={"City hatchback","Family MPV","City scooter"};
-    private static final String[] SPECS={"5 seats · Petrol · Manual","7 seats · Diesel · Manual","2 seats · Petrol · Automatic"};
+    private static final java.util.List<DemoData.Vehicle> EXAMPLES=DemoData.VEHICLES;
+    private static final java.util.List<String> NAMES=EXAMPLES.stream().map(DemoData.Vehicle::name).toList();
     private final DefaultListModel<String> model=new DefaultListModel<>();
     private final JList<String> vehicles=new JList<>(model);
-    private final JLabel name=Design.label(NAMES[0],22,Design.INK);
-    private final JTextArea specification=Design.note(SPECS[0]);
+    private final JLabel name=Design.label(NAMES.get(0),22,Design.INK);
+    private final JTextArea specification=Design.note("");
     private final VehicleDrawing drawing=new VehicleDrawing();
     public FleetView() { this(candidate->{}); }
     public FleetView(Consumer<String> shortlist) {
         super(new BorderLayout(16,16)); setOpaque(false);
         JTextField search=new JTextField(); search.setPreferredSize(new Dimension(160,40));
         JPanel toolbar=new JPanel(new BorderLayout(12,0)); toolbar.setOpaque(false);
-        toolbar.add(Design.field("Find an example vehicle",search)); toolbar.add(Design.label("3 fictional examples",12,Design.MUTED),BorderLayout.EAST); add(toolbar,BorderLayout.NORTH);
+        toolbar.add(Design.field("Find a sample vehicle",search)); toolbar.add(Design.label("10 demo vehicles · not saved",12,Design.MUTED),BorderLayout.EAST); add(toolbar,BorderLayout.NORTH);
         for(String value:NAMES) model.addElement(value);
         vehicles.setSelectionMode(ListSelectionModel.SINGLE_SELECTION); vehicles.setFixedCellHeight(100);
         vehicles.setCellRenderer((list,value,index,selected,focus)->{
-            JLabel item=new JLabel("<html><span style='font-size:12pt'>"+value+"</span><br><br><span style='color:#637180;font-size:9pt'>Example vehicle · not checked</span></html>"); item.setOpaque(true); item.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,selected?3:0,1,0,selected?Design.PRIMARY:Design.BORDER),BorderFactory.createEmptyBorder(14,16,14,16)));
+            JLabel item=new JLabel("<html><span style='font-size:12pt'>"+value+"</span><br><br><span style='color:#637180;font-size:9pt'>Demo only · not a live fleet record</span></html>"); item.setOpaque(true); item.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0,selected?3:0,1,0,selected?Design.PRIMARY:Design.BORDER),BorderFactory.createEmptyBorder(14,16,14,16)));
             item.setBackground(selected?new Color(0xEAF0EC):Color.WHITE);
             return item;
         });
@@ -48,7 +48,7 @@ public final class FleetView extends JPanel {
         split.getLeftComponent().setMinimumSize(new Dimension(235,100)); split.getRightComponent().setMinimumSize(new Dimension(320,100)); add(split);
         vehicles.setSelectedIndex(0);
     }
-    private void select(String value) { int i=java.util.Arrays.asList(NAMES).indexOf(value);name.setText(value);specification.setText(SPECS[i]);drawing.scooter=i==2;drawing.repaint(); }
+    private void select(String value) { int i=NAMES.indexOf(value);DemoData.Vehicle vehicle=EXAMPLES.get(i);name.setText(value);specification.setText(vehicle.category()+" · "+vehicle.specification()+"\nSample reference: "+vehicle.demoRegistration()+" (not a valid registration)");drawing.scooter=vehicle.category().equals("SCOOTER");drawing.repaint(); }
     /** In-repository vector illustration, explicitly not a vehicle photograph. */
     private static final class VehicleDrawing extends JComponent {
         boolean scooter;

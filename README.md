@@ -8,7 +8,7 @@
 ![Windows](https://img.shields.io/badge/Preview-Windows%2011%20x64-2b5b68?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Beta%20preview-d08b36?style=flat-square)
 
-[Download Windows Beta](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.0-preview) · [Release Audit](docs/Release-Audit.md) · [This build's checksums](https://github.com/AshikMadhu/Smart_VRMS/releases/download/v0.2.0-preview/Release-Manifest.md) · [Requirements](planning/Requirements-and-Verification.csv)
+[Download Windows Beta](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.1-preview) · [Release Audit](docs/Release-Audit.md) · [This build's checksums](https://github.com/AshikMadhu/Smart_VRMS/releases/download/v0.2.1-preview/Release-Manifest.md) · [Requirements](planning/Requirements-and-Verification.csv)
 
 </div>
 
@@ -16,7 +16,7 @@
 
 Smart VRMS is a Java 17 and Swing rental-management beta with a Java REST API and Supabase Auth/PostgreSQL backend. The downloadable Windows build is the latest published source candidate; read its verification limits before using it for live business work.
 
-> **Beta preview, not a production-certified product.** The hosted development environment has operator-confirmed staff sign-in and live fleet reads. The 0.2.0 preview contains the current implemented rental modules and passes local fixture/regression checks, but authenticated live writes and every end-to-end business journey have not been accepted against the hosted database. Validate before using real rentals, customer information, or money. See [release notes](docs/release-notes-preview.md), [release audit](docs/Release-Audit.md), and the [requirement tracker](planning/Requirements-and-Verification.csv).
+> **Beta preview, not a production-certified product.** The hosted development environment has operator-confirmed staff sign-in and live fleet reads. The 0.2.1 preview contains the current implemented rental modules and passes local fixture/regression checks, but authenticated live writes and every end-to-end business journey have not been accepted against the hosted database. Validate before using real rentals, customer information, or money. See [release notes](docs/release-notes-preview.md), [release audit](docs/Release-Audit.md), and the [requirement tracker](planning/Requirements-and-Verification.csv).
 
 ---
 
@@ -36,7 +36,7 @@ Smart VRMS is a Java 17 and Swing rental-management beta with a Java REST API an
 
 ## 2. Download and Installation
 
-1. Open the [latest Windows beta release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.0-preview).
+1. Open the [latest Windows beta release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.1-preview).
 2. Download **`SmartVRMS-Windows-x64.zip`** and **`SHA256SUMS.txt`**.
 3. *(Optional but recommended)* Verify file integrity in PowerShell:
    ```powershell
@@ -81,11 +81,15 @@ When you launch `SmartVRMS.exe` for the first time:
 3. **Inviting Additional Staff**:
    - Staff invitation requires a real Supabase Auth Admin integration and a server-only privileged credential. It has not received live acceptance. Do not assume the button successfully creates an Auth account unless the operator confirms the invitation email was received and the user can sign in.
 
+### Explore with sample data
+
+Before signing in, choose **Explore interface preview** to browse 10 fictional examples in the fleet, customer, driver, personnel, rental, finance, and review screens. The sample workspace is read-only and never sends data to the API or saves it to Supabase. Identifiers are marked `DEMO`; phone numbers are masked. See the [demo data catalog](docs/Demo-Data-Catalog.md).
+
 ---
 
 ## 5. Backend Availability & Free-Tier Wake-Up Latency
 
-The 0.2.0-preview connects over HTTPS to the Java API (`https://smart-vrms.onrender.com` by default).
+The 0.2.1-preview connects over HTTPS to the Java API (`https://smart-vrms.onrender.com` by default).
 
 > [!IMPORTANT]
 > **Free host availability:**
@@ -186,8 +190,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-desktop-windows.ps1  
 
 - [Stage 10 Traceability Matrix (90 Requirements)](docs/Stage-10-Traceability-Matrix.md)
 - [Release Audit & Historical Evidence](docs/Release-Audit.md)
-- [Release Manifest & Exact Checksums](https://github.com/AshikMadhu/Smart_VRMS/releases/download/v0.2.0-preview/Release-Manifest.md)
+- [Release Manifest & Exact Checksums](https://github.com/AshikMadhu/Smart_VRMS/releases/download/v0.2.1-preview/Release-Manifest.md)
 - [User Guide](docs/User-Guide.md)
+- [Demo Data Catalog](docs/Demo-Data-Catalog.md)
 - [Developer Guide](docs/Developer-Guide.md)
 - [Operator & Deployment Guide](docs/Operator-and-Deployment-Guide.md)
 - [Third-Party Notices & Licenses](docs/Third-Party-Notices.md)

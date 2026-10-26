@@ -88,7 +88,7 @@ public final class DesktopMain {
             layout.add(createContent(auth,config));
             JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             footer.add(new JLabel("Smart VRMS " + AppVersion.CURRENT + (auth.isConfigured()
-                    ? " · Fleet connected · other modules are previews" : " · Foundation preview")));
+                    ? " · Staff sign-in ready" : " · Demo preview")));
             JButton updates = new JButton("Check for updates");
             footer.add(updates);
             JButton connection = new JButton("Connection settings");

@@ -1,4 +1,4 @@
-param([string]$Version = '0.2.0-preview')
+param([string]$Version = '0.2.1-preview')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $workspaceRoot = [IO.Path]::GetFullPath((Get-Location).Path)
@@ -38,13 +38,18 @@ $builtImage = Join-Path $jpackageTemp 'SmartVRMS'
 $image = Join-Path $outputDir 'SmartVRMS'
 Copy-Item -LiteralPath $builtImage -Destination $image -Recurse
 Remove-Item -LiteralPath $jpackageTemp -Recurse -Force
-Copy-Item -LiteralPath 'docs/Third-Party-Notices.md','docs/Release-Audit.md' -Destination $image
+Copy-Item -LiteralPath 'docs/Third-Party-Notices.md','docs/Release-Audit.md','docs/Demo-Data-Catalog.md' -Destination $image
 @'
 SMART VRMS - AUTHENTICATED RENTAL-MANAGEMENT BETA PREVIEW
 
 Extract the entire archive, then open SmartVRMS.exe.
 Windows 11 x64. Java is bundled; no Java installation is needed.
 This build is unsigned. Its publisher identity is not code-signed.
+
+Choose Explore interface preview at sign-in to browse fictional examples across
+fleet, customers, drivers, personnel, rentals, finance, and reviews. These
+examples are read-only presentation data; nothing is saved or sent to the API.
+See Demo-Data-Catalog.md in this folder for the sample scenarios and totals.
 
 Staff sign-in and the fleet screen were confirmed against the hosted API.
 This build includes the current rental workflow implementation and local

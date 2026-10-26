@@ -1,11 +1,11 @@
 # Smart VRMS release manifest
 
-Version: **0.2.0-preview**. Classification: **authenticated rental-management beta preview**.
+Version: **0.2.1-preview**. Classification: **authenticated rental-management beta preview**.
 Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED**. This is a beta preview; production readiness is not established. Operator acceptance confirmed hosted staff sign-in and fleet reading, and migration 009 indexes; authenticated live write journeys and full lifecycle acceptance remain pending.
 
 | Artifact | SHA-256 | Bytes |
 |---|---|---|
-| SmartVRMS-Windows-x64.zip | 6278014B9BFCC38BEE5E1D4C2D8626AEBCA9C748EB4353C092D83BD2D091A59D | 32150137 |
+| SmartVRMS-Windows-x64.zip | 8C100FC78800F3B33D37DB2B86D4A7B4AA3A59164D3D807D21705C1E145D9834 | 32164834 |
 | SmartVRMS.exe | 02088A27388F77F5D69D3D2E79D10E1985872471F173D8CE495FE8C844F40BEF | Native Windows launcher |
 | server.jar | B51A3E35C58941618C2A329C5FA4DB93182B9F4C4E50D7A15106CF30C753DA44 | Server build input; excluded from the desktop package |
 

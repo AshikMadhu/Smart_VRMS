@@ -1,4 +1,4 @@
-# Smart VRMS release audit — 0.2.0-preview
+# Smart VRMS release audit — 0.2.1-preview
 
 Date: 27 October 2026 (Asia/Kolkata). Classification: **beta preview**. Production readiness is **not established**. This audit records evidence rather than treating code presence or local test success as proof that a complete rental business can safely operate the system.
 
@@ -13,6 +13,7 @@ Date: 27 October 2026 (Asia/Kolkata). Classification: **beta preview**. Producti
 | Fleet read | Operator reported packaged staff sign-in PASS and fleet rows loaded | Live read path only; no authenticated write accepted |
 | Public API liveness | Read-only `/health` request returned HTTP 200 | Health is not a business workflow |
 | Windows package | `jpackage` Windows x64 app image and ZIP built locally | Unsigned; needs release CI to reproduce and publish |
+| Demo data | 10 fictional records per preview domain, with masked contacts and `DEMO-` identifiers | Local, read-only presentation data; not stored in Supabase |
 
 ## Not accepted as a complete business workflow
 
@@ -22,6 +23,6 @@ The prototype records payment manually; no automatic payment-gateway callback is
 
 ## Release rule
 
-Only publish this package as `0.2.0-preview`. Do not call it bug-free, production-ready, or a complete business system. Do not use it as the sole source of financial/accounting records until the live workflows and recovery controls have been accepted. A later stable release requires live workflow and authorization tests, backup/restore evidence, mail-worker operations if reminders are promised, and signed platform packages for every advertised OS.
+Only publish this package as `0.2.1-preview`. Do not call it bug-free, production-ready, or a complete business system. Do not use it as the sole source of financial/accounting records until the live workflows and recovery controls have been accepted. A later stable release requires live workflow and authorization tests, backup/restore evidence, mail-worker operations if reminders are promised, and signed platform packages for every advertised OS.
 
 See [Business Prototype Progress](Business-Prototype-Progress.md), [Operator Guide](Operator-and-Deployment-Guide.md), and the [requirements tracker](../planning/Requirements-and-Verification.csv).

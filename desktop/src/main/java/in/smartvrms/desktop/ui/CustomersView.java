@@ -25,8 +25,8 @@ public final class CustomersView extends JPanel {
         setOpaque(false);
 
         // Header notice for FR-CUST-002
-        JPanel noticeCard = Design.card("Customer Identity & History Repository", "Customer records and verified visit logs (FR-CUST-001, FR-CUST-008).");
-        noticeCard.add(Design.note("NOTICE: In accordance with FR-CUST-002, standalone customer creation is disabled. New customers are registered strictly within the active booking workflow to bind KYC identity with custody."));
+        JPanel noticeCard = Design.card("Customer Identity & History Repository", "10 fictional customer examples · no records are saved.");
+        noticeCard.add(Design.note("Demo workspace only. Contact numbers are masked examples. In the connected workspace, real customer records are loaded from the company service; new identities are created inside a confirmed booking."));
         add(noticeCard, BorderLayout.NORTH);
 
         // Left: Search and Results
@@ -35,9 +35,8 @@ public final class CustomersView extends JPanel {
         searchCard.add(Design.field("Search query", searchField));
         searchCard.add(Box.createVerticalStrut(10));
 
-        // Sample specimens
-        resultsModel.addElement("Vikram Menon • +91 98470 11223 • Kochi");
-        resultsModel.addElement("Sita Lakshmi • +91 94471 55667 • Trivandrum");
+        // Fictional, masked samples are kept local to the signed-out preview.
+        DemoData.CUSTOMERS.forEach(customer -> resultsModel.addElement(format(customer)));
 
         resultsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultsList.setFixedCellHeight(40);
@@ -46,12 +45,8 @@ public final class CustomersView extends JPanel {
         searchButton.addActionListener(e -> {
             String q = searchField.getText().strip().toLowerCase(java.util.Locale.ROOT);
             resultsModel.clear();
-            if (q.contains("vikram") || q.contains("98470") || q.isEmpty()) {
-                resultsModel.addElement("Vikram Menon • +91 98470 11223 • Kochi");
-            }
-            if (q.contains("sita") || q.contains("94471") || q.isEmpty()) {
-                resultsModel.addElement("Sita Lakshmi • +91 94471 55667 • Trivandrum");
-            }
+            DemoData.CUSTOMERS.stream().filter(c -> q.isEmpty() || format(c).toLowerCase(java.util.Locale.ROOT).contains(q))
+                    .forEach(c -> resultsModel.addElement(format(c)));
         });
 
         searchCard.add(Design.row(searchButton));
@@ -72,9 +67,6 @@ public final class CustomersView extends JPanel {
         profileCard.add(Design.label("Visit History (Age recorded per visit - FR-CUST-008)", 14, Design.INK));
         profileCard.add(Box.createVerticalStrut(8));
 
-        visitHistoryModel.addElement("2026-08-15 • Age at visit: 32 • Booking #VRMS-BK-0081 (Completed)");
-        visitHistoryModel.addElement("2026-09-20 • Age at visit: 32 • Booking #VRMS-BK-0104 (Completed)");
-
         visitList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         visitList.setFixedCellHeight(36);
         visitList.setBorder(BorderFactory.createLineBorder(Design.BORDER));
@@ -86,6 +78,13 @@ public final class CustomersView extends JPanel {
                 String[] parts = sel.split("•");
                 customerName.setText(parts[0].strip());
                 customerContact.setText(parts.length > 1 ? parts[1].strip() : "");
+                DemoData.CUSTOMERS.stream().filter(c -> c.name().equals(parts[0].strip())).findFirst().ifPresent(c -> {
+                    visitHistoryModel.clear();
+                    for (int i=0;i<c.completedRentals();i++) {
+                        String date=java.time.LocalDate.now().minusDays(14L+i*23L).toString();
+                        visitHistoryModel.addElement(date+" • Age at visit: "+c.ageAtVisit()+" • DEMO-BK-"+String.format("%04d",DemoData.CUSTOMERS.indexOf(c)*4+i+1)+" (Example)");
+                    }
+                });
             }
         });
 
@@ -104,5 +103,9 @@ public final class CustomersView extends JPanel {
         split.setDividerLocation(380);
 
         add(split, BorderLayout.CENTER);
+    }
+
+    private static String format(DemoData.Customer customer) {
+        return customer.name()+" • "+customer.maskedPhone()+" • "+customer.city();
     }
 }

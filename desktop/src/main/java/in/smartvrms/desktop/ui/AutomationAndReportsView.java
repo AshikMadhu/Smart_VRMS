@@ -776,8 +776,31 @@ public final class AutomationAndReportsView extends JPanel {
         specimenReviews.clear();
         outboxTableModel.setRowCount(0);
         reviewsTableModel.setRowCount(0);
-        totalReviewsLabel.setText("0");
-        avgRatingLabel.setText("—");
-        feedbackLabel.setText("Ready. Connect with staff session to load live notifications and feedback.");
+        int ratingTotal=0;
+        for(int i=0;i<DemoData.REVIEWS.size();i++) {
+            DemoData.Review review=DemoData.REVIEWS.get(i);
+            ratingTotal+=review.rating();
+            reviewsTableModel.addRow(new Object[]{
+                    String.format("DEMO-REV-%04d",i+1),String.format("DEMO-BK-%04d",i+1),review.rating()+" / 5",
+                    review.comment(),"SAMPLE · NOT SUBMITTED","EXAMPLE",
+                    DATE_FMT.format(Instant.now().minusSeconds(86400L*review.daysAgo()))
+            });
+        }
+        totalReviewsLabel.setText(String.valueOf(DemoData.REVIEWS.size()));
+        avgRatingLabel.setText(String.format("%.1f / 5.0",ratingTotal/(double)DemoData.REVIEWS.size()));
+        opTotalBookingsLabel.setText("10");
+        opActiveRentalsLabel.setText("10");
+        opCompletedRentalsLabel.setText("0");
+        opOverdueRentalsLabel.setText("3");
+        opMaintenanceCasesLabel.setText("0");
+        opReviewsCountLabel.setText(String.valueOf(DemoData.REVIEWS.size()));
+        opAvgRatingLabel.setText(avgRatingLabel.getText());
+        opPeriodLabel.setText("Demo data · not a live report");
+        finPeriodLabel.setText("Demo data · not a live report");
+        finGrossBilledLabel.setText(String.format("₹%,.2f",DemoData.totalBilledPaise()/100.0));
+        finCashCollectedLabel.setText(String.format("₹%,.2f",DemoData.totalPaidPaise()/100.0));
+        finReceivablesLabel.setText(String.format("₹%,.2f",(DemoData.totalBilledPaise()-DemoData.totalPaidPaise())/100.0));
+        finDepositsHeldLabel.setText(String.format("₹%,.2f",DemoData.depositsHeldPaise()/100.0));
+        feedbackLabel.setText("10 sample reviews and illustrative report totals. No messages were sent and no report was generated from company data.");
     }
 }

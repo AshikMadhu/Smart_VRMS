@@ -25,7 +25,7 @@ public final class PersonnelView extends JPanel {
     public final JTextField phone = new JTextField();
     public final JTextField email = new JTextField();
     public final JTextField address = new JTextField();
-    public final JTextField joiningDate = new JTextField("2026-10-25");
+    public final JTextField joiningDate = new JTextField(java.time.LocalDate.now().toString());
     public final JCheckBox isDriver = new JCheckBox("Assign driver role (FR-EMP-008)");
     public final JButton registerButton = Design.button("Register Employee", true);
     public final JLabel registerStatus = Design.label("", 12, Design.PRIMARY);
@@ -36,7 +36,7 @@ public final class PersonnelView extends JPanel {
     public final JLabel deactivationFeedback = Design.label("", 12, Design.CAUTION);
 
     // Attendance Fields
-    public final JTextField attendanceDate = new JTextField("2026-10-25");
+    public final JTextField attendanceDate = new JTextField(java.time.LocalDate.now().toString());
     public final JComboBox<String> attendanceStatus = new JComboBox<>(new String[]{"PRESENT", "ABSENT", "ON_LEAVE"});
     public final JTextField attendanceNotes = new JTextField();
     public final JButton recordAttendanceBtn = Design.button("Record Attendance", true);
@@ -46,7 +46,7 @@ public final class PersonnelView extends JPanel {
     public final JComboBox<String> compArrangement = new JComboBox<>(new String[]{"MONTHLY_SALARY", "DAILY_RATE", "PER_TRIP"});
     public final JTextField compBasePaise = new JTextField("2500000"); // 25,000 INR
     public final JTextField compTripPaise = new JTextField("50000");   // 500 INR
-    public final JTextField compEffective = new JTextField("2026-10-25");
+    public final JTextField compEffective = new JTextField(java.time.LocalDate.now().toString());
     public final JButton recordCompBtn = Design.button("Record Compensation Arrangement", true);
     public final JLabel compStatusLabel = Design.label("", 12, Design.PRIMARY);
 
@@ -86,10 +86,8 @@ public final class PersonnelView extends JPanel {
     private JComponent buildRosterTab() {
         JPanel sections = Design.vertical();
 
-        // Sample initial employees
-        employeeListModel.addElement("Rahul Nair • Active • Fleet Operations");
-        employeeListModel.addElement("Deepak Kumar • Active • Senior Driver");
-        employeeListModel.addElement("Ananya Pillai • Active • Desk Manager");
+        // Fictional roster examples; PreviewSafety disables all local actions.
+        DemoData.EMPLOYEES.forEach(e -> employeeListModel.addElement(e.name()+" • "+e.status()+" • "+e.role()));
 
         employeeList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         employeeList.setFixedCellHeight(44);

@@ -628,53 +628,35 @@ public final class FinanceView extends JPanel {
     }
 
     private void populateSpecimens() {
-        revenueBilledLabel.setText("₹12,400.00");
-        cashReceivedLabel.setText("₹8,200.00");
-        balanceReceivableLabel.setText("₹4,200.00");
-        depositHeldLabel.setText("₹5,000.00");
+        long billed=DemoData.totalBilledPaise();
+        long received=DemoData.totalPaidPaise();
+        revenueBilledLabel.setText(String.format("₹%,.2f",billed/100.0));
+        cashReceivedLabel.setText(String.format("₹%,.2f",received/100.0));
+        balanceReceivableLabel.setText(String.format("₹%,.2f",(billed-received)/100.0));
+        depositHeldLabel.setText(String.format("₹%,.2f",DemoData.depositsHeldPaise()/100.0));
 
         paymentsTableModel.setRowCount(0);
         docsTableModel.setRowCount(0);
         specimensPayments.clear();
         specimensDocs.clear();
 
-        paymentsTableModel.addRow(new Object[]{
-                TIME_FMT.format(Instant.now().minusSeconds(86400 * 2)),
-                "UPI",
-                "2,400.00",
-                "UTR4892019482",
-                "Bank credit confirmed via Axis Bank statement",
-                "OPERATOR_ADMIN"
-        });
-        paymentsTableModel.addRow(new Object[]{
-                TIME_FMT.format(Instant.now().minusSeconds(86400)),
-                "CASH",
-                "5,800.00",
-                "RCP-2026-0041",
-                "Physical cash counted and receipt signed at desk",
-                "STAFF_RAJESH"
-        });
+        for(DemoData.Payment payment:DemoData.PAYMENTS) {
+            paymentsTableModel.addRow(new Object[]{
+                    TIME_FMT.format(Instant.now().minusSeconds(86400L*payment.daysAgo())),
+                    payment.method(),String.format("%,.2f",payment.amountPaise()/100.0),payment.reference(),
+                    "SAMPLE ONLY · NOT VERIFIED OR POSTED","DEMO DATA"
+            });
+        }
+        for(DemoData.Invoice invoice:DemoData.INVOICES) {
+            docsTableModel.addRow(new Object[]{
+                    invoice.number(),invoice.type(),String.format("%,.2f",invoice.totalPaise()/100.0),
+                    String.format("%,.2f",invoice.paidPaise()/100.0),
+                    String.format("%,.2f",(invoice.totalPaise()-invoice.paidPaise())/100.0),
+                    TIME_FMT.format(Instant.now().minusSeconds(86400L*invoice.daysAgo())),"EXAMPLE · NOT ISSUED"
+            });
+        }
 
-        docsTableModel.addRow(new Object[]{
-                "VRMS-2026-DOC-0001",
-                "PRO_FORMA_INVOICE",
-                "12,400.00",
-                "8,200.00",
-                "4,200.00",
-                TIME_FMT.format(Instant.now().minusSeconds(86400 * 2)),
-                "ISSUED"
-        });
-        docsTableModel.addRow(new Object[]{
-                "VRMS-2026-DOC-0002",
-                "PAYMENT_RECEIPT",
-                "5,800.00",
-                "5,800.00",
-                "0.00",
-                TIME_FMT.format(Instant.now().minusSeconds(86400)),
-                "ISSUED"
-        });
-
-        feedbackLabel.setText("Preview fixtures: Connect Finance API to load live company ledger.");
+        feedbackLabel.setText("10 sample payments and invoices · no bank receipt, invoice, or ledger entry was created.");
         feedbackLabel.setForeground(Design.MUTED);
     }
 }

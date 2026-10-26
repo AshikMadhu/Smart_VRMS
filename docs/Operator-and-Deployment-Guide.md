@@ -1,6 +1,6 @@
 # Operator and deployment guide
 
-**0.2.0-preview is a beta candidate; production readiness is not established.** The hosted project has operator-confirmed staff sign-in and fleet reads. Local fixture suites do not prove live writes or complete journeys. Outbound email/reminder delivery and backup/restore drills are not confirmed operational. Operator acceptance covers current-source staff sign-in, restricted-role/TLS checks, in-transaction membership and live Fleet reads. Migration 009 and its six indexes are user-confirmed in Supabase. The newer local source wires additional modules, but those workflows have not passed real restricted-role Supabase journeys. Finance, automation, review, and reporting locally use `JdbcStaffContext` rather than the absent `vrms_private.set_app_context`. The email sender/scheduler and production backup/restore are not implemented. Do not treat local fixture suites as live acceptance.
+**0.2.1-preview is a beta candidate; production readiness is not established.** The hosted project has operator-confirmed staff sign-in and fleet reads. Migration 009 and its six expected indexes were confirmed by the user. This release adds local, read-only fictional examples for the signed-out preview; they are never sent to Supabase. Other end-to-end live business journeys have not been accepted. Outbound email/reminder delivery and backup/restore drills are not confirmed operational. Do not treat fixture suites or the health endpoint as live business acceptance.
 
 ## Existing development setup
 

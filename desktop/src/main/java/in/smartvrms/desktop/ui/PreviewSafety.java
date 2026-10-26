@@ -9,8 +9,8 @@ public final class PreviewSafety {
     public static JPanel readOnly(JComponent example) {
         disableActions(example);
         JPanel panel = new JPanel(new BorderLayout(0, 12));
-        panel.add(Design.card("Example screen — not connected",
-                "This area uses fictional examples. Changes here are not saved; use the connected fleet screen for live vehicle records."), BorderLayout.NORTH);
+        panel.add(Design.card("Read-only demo workspace",
+                "The records below are fictional examples for exploring the workflow. Nothing is saved. Sign in to see your company's records."), BorderLayout.NORTH);
         panel.add(example);
         return panel;
     }

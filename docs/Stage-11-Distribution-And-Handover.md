@@ -1,13 +1,13 @@
 # Stage 11 — Application Distribution, Safe Updates, and Operator Handover
 
-> Historical stage notes below describe evidence from their original review date. Current release evidence is in [Release-Audit.md](Release-Audit.md); do not use the older version numbers/checksums below for the 0.2.0-preview download.
+> Historical stage notes below describe evidence from their original review date. Current release evidence is in [Release-Audit.md](Release-Audit.md); do not use the older version numbers/checksums below for the 0.2.1-preview download.
 
 ## 1. Executive Summary & Verification Scope
 
 Stage 11 records local packaging and handover checks. It does not establish that the current source has been published or that all target platforms are ready.
 
 Current status (updated 27 October 2026):
-- **`NFR-DIST-001`**: Windows x64 `0.2.0-preview` candidate packaged; macOS/Linux remain unbuilt/unverified.
+- **`NFR-DIST-001`**: Windows x64 `0.2.1-preview` candidate packaged; macOS/Linux remain unbuilt/unverified.
 - **`NFR-DIST-002`**: Local Windows package and verification checks run; live end-to-end business acceptance remains incomplete.
 - **`NFR-DIST-003`**: Windows package is unsigned; macOS/Linux signing and native runner evidence are absent.
 - **`NFR-DOCS-001`**: See the current release audit and operator guide for scope limits.
@@ -90,7 +90,7 @@ Smart VRMS implements an explicit, non-silent update protocol:
 
 ## 7. Publication Gate G7 & Release Candidate State
 
-This version/checksum table is a historical snapshot and does not identify the current 0.2.0-preview artifact.
+This version/checksum table is a historical snapshot and does not identify the current 0.2.1-preview artifact.
 
 Per `docs/Release-Manifest.md`, public binary release remains in preview status:
 - **Current Version**: `0.1.2-preview`

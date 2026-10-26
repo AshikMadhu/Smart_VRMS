@@ -166,47 +166,35 @@ public final class RunningServicesView extends JPanel {
         currentSummaries.clear();
         servicesListModel.clear();
         visibleSummaries.clear();
-
         Instant now = Instant.now();
-        Instant pastStart = now.minus(Duration.ofHours(30));
-        Instant pastEnd = now.minus(Duration.ofHours(6)); // Overdue
-        Instant futureEnd = now.plus(Duration.ofHours(18));
-
-        // Specimen 1: Overdue active rental
-        UUID bId1 = UUID.randomUUID();
-        UUID cId1 = UUID.randomUUID();
-        RunningAssignmentSummary a1 = new RunningAssignmentSummary(
-                UUID.randomUUID(), UUID.randomUUID(), "KL-07-CD-9012", "SUV",
-                UUID.randomUUID(), "Rajesh Nair", pastStart, pastEnd, "CHECKED_OUT", "CHECKED_OUT", "PENDING"
-        );
-        RunningServiceSummary s1 = new RunningServiceSummary(
-                bId1, "VRMS-BK-0089", cId1, "Vikram Menon", "+91 98470 11223", UUID.randomUUID(),
-                "ACTIVE", pastStart, pastEnd, true, 1, List.of("KL-07-CD-9012"), List.of("Rajesh Nair"),
-                500000L, 200000L, 300000L, List.of(a1)
-        );
-
-        // Specimen 2: Normal on-time package rental
-        UUID bId2 = UUID.randomUUID();
-        UUID cId2 = UUID.randomUUID();
-        RunningAssignmentSummary a21 = new RunningAssignmentSummary(
-                UUID.randomUUID(), UUID.randomUUID(), "KL-01-AB-1234", "CAR",
-                null, null, now.minus(Duration.ofHours(12)), futureEnd, "CHECKED_OUT", "CHECKED_OUT", "PENDING"
-        );
-        RunningAssignmentSummary a22 = new RunningAssignmentSummary(
-                UUID.randomUUID(), UUID.randomUUID(), "KL-01-EF-5678", "BIKE",
-                null, null, now.minus(Duration.ofHours(12)), futureEnd, "RESERVED", "RESERVED", null
-        );
-        RunningServiceSummary s2 = new RunningServiceSummary(
-                bId2, "VRMS-BK-0102", cId2, "Sita Lakshmi", "+91 94471 55667", UUID.randomUUID(),
-                "ACTIVE", now.minus(Duration.ofHours(12)), futureEnd, false, 2,
-                List.of("KL-01-AB-1234", "KL-01-EF-5678"), List.of(),
-                800000L, 800000L, 0L, List.of(a21, a22)
-        );
-
-        currentSummaries.add(s1);
-        currentSummaries.add(s2);
+        for (int i=0;i<DemoData.CUSTOMERS.size();i++) {
+            DemoData.Customer customer=DemoData.CUSTOMERS.get(i);
+            DemoData.Vehicle vehicle=DemoData.VEHICLES.get(i);
+            DemoData.Driver driver=DemoData.DRIVERS.get(i);
+            Instant start=now.minus(Duration.ofHours(12L+i*9L));
+            Instant expectedReturn=i<3?now.minus(Duration.ofHours(2L+i)):now.plus(Duration.ofHours(4L+i*3L));
+            UUID vehicleId=demoId("vehicle",i);
+            UUID driverId=i%2==0?demoId("driver",i):null;
+            String assignedDriver=i%2==0?driver.name():null;
+            RunningAssignmentSummary assignment=new RunningAssignmentSummary(
+                    demoId("assignment",i),vehicleId,vehicle.demoRegistration(),vehicle.category(),driverId,assignedDriver,
+                    start,expectedReturn,"CHECKED_OUT","CHECKED_OUT","SAMPLE"
+            );
+            DemoData.Invoice invoice=DemoData.INVOICES.get(i);
+            long received=DemoData.PAYMENTS.get(i).amountPaise();
+            currentSummaries.add(new RunningServiceSummary(
+                    demoId("booking",i),String.format("DEMO-BK-%04d",i+1),demoId("customer",i),customer.name(),customer.maskedPhone(),
+                    demoId("rate-plan",i),"ACTIVE",start,expectedReturn,expectedReturn.isBefore(now),1,
+                    List.of(vehicle.demoRegistration()),assignedDriver==null?List.of():List.of(assignedDriver),
+                    invoice.totalPaise(),received,Math.max(0,invoice.totalPaise()-received),List.of(assignment)
+            ));
+        }
         populateList(false);
-        feedbackLabel.setText("Preview fixtures: Connect Operations API to load live rentals.");
+        feedbackLabel.setText("10 fictional running rentals · example dates and balances only; no custody is recorded.");
+    }
+
+    private static UUID demoId(String kind,int index) {
+        return UUID.nameUUIDFromBytes(("smart-vrms-demo-"+kind+"-"+index).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
 
@@ -233,7 +221,7 @@ public final class RunningServicesView extends JPanel {
                 }
             }.execute();
         } else {
-            feedbackLabel.setText("Queue refreshed from live database.");
+            feedbackLabel.setText("Demo queue refreshed locally; no database request was made.");
             populateList(overdueOnly);
         }
     }
