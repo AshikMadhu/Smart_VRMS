@@ -53,6 +53,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Independent review checks did not compile.' }
 java '-Djava.awt.headless=true' -cp "$reviewClassPath;verification/generated" in.smartvrms.verification.ReviewRegressionChecks
 if ($LASTEXITCODE -ne 0) { throw 'Independent review checks failed.' }
 $allClassPath = "$serverClassPath;desktop/target/classes"
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage1SecurityAndAuthBoundaryChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 1 security and auth check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.server.security.Stage1SecurityAndAuthBoundaryChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 1 security and auth checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage2PersonnelAndDriverChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 2 personnel and driver check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.server.security.Stage2PersonnelAndDriverChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 2 personnel and driver checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage2AIntegrationChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Stage 2A check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage2AIntegrationChecks
@@ -65,22 +73,42 @@ javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated v
 if ($LASTEXITCODE -ne 0) { throw 'Stage 3 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage3IntegrationChecks
 if ($LASTEXITCODE -ne 0) { throw 'Stage 3 checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage3FleetAndDocumentChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 3 fleet and document check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage3FleetAndDocumentChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 3 fleet and document checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage4IntegrationChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Stage 4 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage4IntegrationChecks
 if ($LASTEXITCODE -ne 0) { throw 'Stage 4 checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage4BookingAndCustomerChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 4 booking and customer check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage4BookingAndCustomerChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 4 booking and customer checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage5IntegrationChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Stage 5 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage5IntegrationChecks
 if ($LASTEXITCODE -ne 0) { throw 'Stage 5 checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage5OperationsAndCustodyChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 5 operations and custody check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage5OperationsAndCustodyChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 5 operations and custody checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage6IntegrationChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Stage 6 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage6IntegrationChecks
 if ($LASTEXITCODE -ne 0) { throw 'Stage 6 checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage6FinanceAndLedgerChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 6 finance and ledger check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage6FinanceAndLedgerChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 6 finance and ledger checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage7IntegrationChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Stage 7 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage7IntegrationChecks
 if ($LASTEXITCODE -ne 0) { throw 'Stage 7 checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage7AutomationAndReportingChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 7 automation and reporting check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage7AutomationAndReportingChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 7 automation and reporting checks failed.' }
 javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage8HardeningAndJourneysChecks.java
 if ($LASTEXITCODE -ne 0) { throw 'Stage 8 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage8HardeningAndJourneysChecks
@@ -93,3 +121,7 @@ javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated v
 if ($LASTEXITCODE -ne 0) { throw 'Stage 10 check compilation failed.' }
 java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage10ReleaseAndHandoverChecks
 if ($LASTEXITCODE -ne 0) { throw 'Stage 10 checks failed.' }
+javac --release 17 -encoding UTF-8 -cp $allClassPath -d verification/generated verification/Stage11DistributionAndReleaseChecks.java
+if ($LASTEXITCODE -ne 0) { throw 'Stage 11 check compilation failed.' }
+java '-Djava.awt.headless=true' -cp "$allClassPath;verification/generated" in.smartvrms.verification.Stage11DistributionAndReleaseChecks
+if ($LASTEXITCODE -ne 0) { throw 'Stage 11 checks failed.' }

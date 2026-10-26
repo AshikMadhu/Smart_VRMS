@@ -7,6 +7,8 @@ import in.smartvrms.contracts.OperationalReportSummary;
 import in.smartvrms.contracts.ReportingPeriodFilter;
 import in.smartvrms.contracts.StaffSession;
 import in.smartvrms.server.reporting.PeriodCalculator;
+import in.smartvrms.server.security.Capability;
+import in.smartvrms.server.security.JdbcStaffContext;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -15,6 +17,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
 
 public class JdbcReportingService implements ReportingPort {
@@ -27,14 +30,6 @@ public class JdbcReportingService implements ReportingPort {
         this.auditPort = auditPort;
     }
 
-    private void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("SELECT vrms_private.set_app_context(?, ?)")) {
-            ps.setObject(1, session.userId());
-            ps.setObject(2, session.companyId());
-            ps.execute();
-        }
-    }
-
     private void checkStaff(StaffSession session) {
         Objects.requireNonNull(session, "session");
         if (!"ADMINISTRATOR".equals(session.role()) && !"EMPLOYEE".equals(session.role())) {
@@ -45,7 +40,7 @@ public class JdbcReportingService implements ReportingPort {
     private void checkAdminOnly(StaffSession session, String actionDesc) {
         checkStaff(session);
         if (!"ADMINISTRATOR".equals(session.role())) {
-            throw new SecurityException("Forbidden: Only Administrators can " + actionDesc + " (FR-ACC-003, FR-FIN-005)");
+            throw new SecurityException("Forbidden: Only administrators can " + actionDesc + " (FR-ACC-003, FR-FIN-005)");
         }
     }
 
@@ -55,7 +50,9 @@ public class JdbcReportingService implements ReportingPort {
         Objects.requireNonNull(filter, "filter");
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            c.setReadOnly(true);
+            c.setAutoCommit(false);
+            JdbcStaffContext.require(c, session, Capability.VIEW_OPERATIONAL_HISTORY);
 
             int totalBookings = 0;
             int totalAssignments = 0;
@@ -148,11 +145,13 @@ public class JdbcReportingService implements ReportingPort {
                 }
             }
 
-            return new OperationalReportSummary(
+            OperationalReportSummary report = new OperationalReportSummary(
                     filter.fromTime(), filter.toTime(), totalBookings, totalAssignments,
                     activeRentals, completedRentals, overdueRentals, maintenanceCases,
                     reviewsCount, avgRating
             );
+            c.commit();
+            return report;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to generate operational report: " + e.getMessage(), e);
         }
@@ -164,7 +163,9 @@ public class JdbcReportingService implements ReportingPort {
         Objects.requireNonNull(filter, "filter");
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            c.setReadOnly(true);
+            c.setAutoCommit(false);
+            JdbcStaffContext.require(c, session, Capability.VIEW_COMPANY_MARGIN);
 
             long revenuePaise = 0L;
             long cashPaise = 0L;
@@ -244,14 +245,40 @@ public class JdbcReportingService implements ReportingPort {
             long netMargin = revenuePaise - totalExpenses;
             String periodLabel = PeriodCalculator.getFinancialYearLabel(filter.fromTime());
 
-            return new FinancialReportSummary(
+            FinancialReportSummary report = new FinancialReportSummary(
                     filter.fromTime(), filter.toTime(), periodLabel,
                     revenuePaise, cashPaise, receivablesPaise, depositLiabilityPaise,
                     maintenancePaise, compensationPaise, totalExpenses, netMargin
             );
+            c.commit();
+            return report;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to generate financial report: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Sanitizes CSV cell values to prevent spreadsheet formula injection attacks (CSV Injection)
+     * and handles proper RFC 4180 quoting and escaping.
+     */
+    public static String escapeCsvCell(String value) {
+        if (value == null) {
+            return "";
+        }
+        String clean = value.trim();
+        // Prevent formula execution in spreadsheet software (=, +, -, @, tab, CR)
+        if (value.startsWith("\t") || value.startsWith("\r")) {
+            clean = "'" + value;
+        } else if (!clean.isEmpty()) {
+            char first = clean.charAt(0);
+            if (first == '=' || first == '+' || first == '-' || first == '@') {
+                clean = "'" + clean;
+            }
+        }
+        if (clean.contains(",") || clean.contains("\"") || clean.contains("\n") || clean.contains("\r")) {
+            clean = "\"" + clean.replace("\"", "\"\"") + "\"";
+        }
+        return clean;
     }
 
     @Override
@@ -261,36 +288,38 @@ public class JdbcReportingService implements ReportingPort {
         OperationalReportSummary ops = getOperationalReport(session, filter);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Smart VRMS Period Report\n");
-        sb.append("Period:,").append(PeriodCalculator.formatPeriodRange(filter.fromTime(), filter.toTime())).append("\n");
-        sb.append("Generated By:,").append(session.role()).append("\n\n");
+        // Prepend UTF-8 Byte Order Mark (BOM) for correct UTF-8 and currency character rendering in Excel
+        sb.append("\uFEFF");
+        sb.append(escapeCsvCell("Smart VRMS Period Report")).append("\n");
+        sb.append(escapeCsvCell("Period:")).append(",").append(escapeCsvCell(PeriodCalculator.formatPeriodRange(filter.fromTime(), filter.toTime()))).append("\n");
+        sb.append(escapeCsvCell("Generated By:")).append(",").append(escapeCsvCell(session.role())).append("\n\n");
 
         sb.append("OPERATIONAL PERFORMANCE\n");
         sb.append("Metric,Value\n");
-        sb.append("Total Bookings,").append(ops.totalBookingsCount()).append("\n");
-        sb.append("Total Vehicle Assignments,").append(ops.totalAssignmentsCount()).append("\n");
-        sb.append("Active Rentals,").append(ops.activeRentalsCount()).append("\n");
-        sb.append("Completed Rentals,").append(ops.completedRentalsCount()).append("\n");
-        sb.append("Overdue Rentals,").append(ops.overdueRentalsCount()).append("\n");
-        sb.append("Maintenance Incidents,").append(ops.maintenanceCasesCount()).append("\n");
-        sb.append("Customer Reviews Count,").append(ops.reviewsCount()).append("\n");
-        sb.append("Average Review Rating,").append(String.format("%.2f", ops.averageReviewRating())).append("\n\n");
+        sb.append(escapeCsvCell("Total Bookings")).append(",").append(ops.totalBookingsCount()).append("\n");
+        sb.append(escapeCsvCell("Total Vehicle Assignments")).append(",").append(ops.totalAssignmentsCount()).append("\n");
+        sb.append(escapeCsvCell("Active Rentals")).append(",").append(ops.activeRentalsCount()).append("\n");
+        sb.append(escapeCsvCell("Completed Rentals")).append(",").append(ops.completedRentalsCount()).append("\n");
+        sb.append(escapeCsvCell("Overdue Rentals")).append(",").append(ops.overdueRentalsCount()).append("\n");
+        sb.append(escapeCsvCell("Maintenance Incidents")).append(",").append(ops.maintenanceCasesCount()).append("\n");
+        sb.append(escapeCsvCell("Customer Reviews Count")).append(",").append(ops.reviewsCount()).append("\n");
+        sb.append(escapeCsvCell("Average Review Rating")).append(",").append(String.format(Locale.US, "%.2f", ops.averageReviewRating())).append("\n\n");
 
         if (isAdmin) {
             FinancialReportSummary fin = getFinancialReport(session, filter);
             sb.append("FINANCIAL PERFORMANCE (ADMINISTRATOR CONFIDENTIAL)\n");
             sb.append("Metric,Amount (INR)\n");
-            sb.append("Total Revenue Billed,").append(String.format("%.2f", fin.totalRevenueBilledPaise() / 100.0)).append("\n");
-            sb.append("Actual Cash Collected,").append(String.format("%.2f", fin.totalCashCollectedPaise() / 100.0)).append("\n");
-            sb.append("Outstanding Receivables,").append(String.format("%.2f", fin.outstandingReceivablesPaise() / 100.0)).append("\n");
-            sb.append("Refundable Deposit Liability,").append(String.format("%.2f", fin.refundableDepositLiabilityPaise() / 100.0)).append("\n");
-            sb.append("Maintenance Expenses,").append(String.format("%.2f", fin.maintenanceExpensesPaise() / 100.0)).append("\n");
-            sb.append("Staff Compensation Expenses,").append(String.format("%.2f", fin.compensationExpensesPaise() / 100.0)).append("\n");
-            sb.append("Total Operating Expenses,").append(String.format("%.2f", fin.totalOperatingExpensesPaise() / 100.0)).append("\n");
-            sb.append("Net Operating Accrual Margin,").append(String.format("%.2f", fin.netOperatingAccrualMarginPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Total Revenue Billed")).append(",").append(String.format(Locale.US, "%.2f", fin.totalRevenueBilledPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Actual Cash Collected")).append(",").append(String.format(Locale.US, "%.2f", fin.totalCashCollectedPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Outstanding Receivables")).append(",").append(String.format(Locale.US, "%.2f", fin.outstandingReceivablesPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Refundable Deposit Liability")).append(",").append(String.format(Locale.US, "%.2f", fin.refundableDepositLiabilityPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Maintenance Expenses")).append(",").append(String.format(Locale.US, "%.2f", fin.maintenanceExpensesPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Staff Compensation Expenses")).append(",").append(String.format(Locale.US, "%.2f", fin.compensationExpensesPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Total Operating Expenses")).append(",").append(String.format(Locale.US, "%.2f", fin.totalOperatingExpensesPaise() / 100.0)).append("\n");
+            sb.append(escapeCsvCell("Net Operating Accrual Margin")).append(",").append(String.format(Locale.US, "%.2f", fin.netOperatingAccrualMarginPaise() / 100.0)).append("\n");
         } else {
             sb.append("FINANCIAL PERFORMANCE\n");
-            sb.append("Notice: Financial margin and expense details restricted to Administrator accounts (FR-ACC-003, FR-FIN-005)\n");
+            sb.append(escapeCsvCell("Notice: Financial margin and expense details restricted to Administrator accounts (FR-ACC-003, FR-FIN-005)")).append("\n");
         }
 
         return sb.toString();

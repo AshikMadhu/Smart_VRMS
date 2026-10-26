@@ -65,7 +65,7 @@ public class JdbcBookingService implements BookingPort {
                 UUID categoryId = null;
 
                 try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT v.name, c.code, v.registration_plate, v.category_id " +
+                        "SELECT (v.manufacturer || ' ' || v.model) AS name, c.code, v.registration_plate, v.category_id " +
                         "FROM vrms_private.vehicles v " +
                         "JOIN vrms_private.vehicle_categories c ON c.id = v.category_id " +
                         "WHERE v.company_id = ? AND v.id = ?")) {
@@ -161,15 +161,15 @@ public class JdbcBookingService implements BookingPort {
     }
 
     private boolean checkVehicleAvailability(Connection conn, UUID companyId, UUID vehicleId, Instant startTime, Instant endTime) throws SQLException {
-        // 1. Check active reservations overlap
+        // 1. Check active reservations overlap [start_time, end_time) with [startTime, endTime)
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT 1 FROM vrms_private.vehicle_reservations " +
                 "WHERE company_id = ? AND vehicle_id = ? AND status = 'ACTIVE' " +
-                "AND tstzrange(start_time, end_time) && tstzrange(?, ?)")) {
+                "AND start_time < ? AND end_time > ?")) {
             ps.setObject(1, companyId);
             ps.setObject(2, vehicleId);
-            ps.setTimestamp(3, Timestamp.from(startTime));
-            ps.setTimestamp(4, Timestamp.from(endTime));
+            ps.setTimestamp(3, Timestamp.from(endTime));
+            ps.setTimestamp(4, Timestamp.from(startTime));
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return false; // Reserved
@@ -180,7 +180,7 @@ public class JdbcBookingService implements BookingPort {
         // 2. Check active freezes/restrictions
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT 1 FROM vrms_private.asset_restrictions " +
-                "WHERE company_id = ? AND vehicle_id = ? AND is_active = true")) {
+                "WHERE company_id = ? AND asset_id = ? AND asset_type = 'VEHICLE' AND active = true")) {
             ps.setObject(1, companyId);
             ps.setObject(2, vehicleId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -193,7 +193,7 @@ public class JdbcBookingService implements BookingPort {
         // 3. Check document validity (expiry before end time)
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT 1 FROM vrms_private.vehicle_documents " +
-                "WHERE company_id = ? AND vehicle_id = ? AND is_current = true " +
+                "WHERE company_id = ? AND vehicle_id = ? " +
                 "AND expiry_date IS NOT NULL AND expiry_date < ?::date")) {
             ps.setObject(1, companyId);
             ps.setObject(2, vehicleId);
@@ -222,15 +222,15 @@ public class JdbcBookingService implements BookingPort {
             return false;
         }
 
-        // 1. Check active driver reservations overlap
+        // 1. Check active driver reservations overlap [start_time, end_time) with [startTime, endTime)
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT 1 FROM vrms_private.driver_reservations " +
                 "WHERE company_id = ? AND driver_id = ? AND status = 'ACTIVE' " +
-                "AND tstzrange(start_time, end_time) && tstzrange(?, ?)")) {
+                "AND start_time < ? AND end_time > ?")) {
             ps.setObject(1, companyId);
             ps.setObject(2, driverId);
-            ps.setTimestamp(3, Timestamp.from(startTime));
-            ps.setTimestamp(4, Timestamp.from(endTime));
+            ps.setTimestamp(3, Timestamp.from(endTime));
+            ps.setTimestamp(4, Timestamp.from(startTime));
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return false; // Driver already reserved
@@ -278,6 +278,20 @@ public class JdbcBookingService implements BookingPort {
         return true;
     }
 
+    private String computeCommandHash(BookingConfirmationCommand cmd) {
+        StringBuilder sb = new StringBuilder();
+        if (cmd.existingCustomerId() != null) sb.append(cmd.existingCustomerId()).append(";");
+        else sb.append(cmd.customerFullName()).append(";").append(cmd.customerContact()).append(";");
+        sb.append(cmd.startTime()).append(";").append(cmd.endTime()).append(";");
+        sb.append(cmd.agreedAdvancePaise()).append(";").append(cmd.depositPaise()).append(";");
+        if (cmd.items() != null) {
+            for (var item : cmd.items()) {
+                sb.append(item.vehicleId()).append(":").append(item.driverRequired()).append(":").append(item.driverId()).append(";");
+            }
+        }
+        return in.smartvrms.server.security.JdbcIdempotencyService.computeRequestHash(sb.toString());
+    }
+
     @Override
     public BookingRecord confirmBooking(StaffSession session, BookingConfirmationCommand command) {
         Objects.requireNonNull(session, "session");
@@ -302,6 +316,29 @@ public class JdbcBookingService implements BookingPort {
         }
 
         UUID companyId = session.companyId();
+
+        // Idempotency check (FR-BOOK-010)
+        String idempotencyKey = command.idempotencyKey();
+        String requestHash = computeCommandHash(command);
+        boolean recordPendingNeeded = false;
+        if (idempotencyPort != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var existingRecord = idempotencyPort.check(session, idempotencyKey, "CONFIRM_BOOKING", requestHash);
+            if (existingRecord.isPresent()) {
+                var rec = existingRecord.get();
+                if ("COMPLETED".equals(rec.status()) && rec.responseBody() != null && !rec.responseBody().isBlank()) {
+                    try {
+                        UUID cachedBookingId = UUID.fromString(rec.responseBody().trim());
+                        BookingRecord cached = getBookingById(companyId, cachedBookingId);
+                        if (cached != null) {
+                            return cached;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            } else {
+                idempotencyPort.recordPending(session, idempotencyKey, "CONFIRM_BOOKING", requestHash, 86400);
+                recordPendingNeeded = true;
+            }
+        }
 
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
@@ -373,8 +410,24 @@ public class JdbcBookingService implements BookingPort {
                 UUID customerId = command.existingCustomerId();
                 UUID visitId;
 
-                if (customerId == null) {
-                    if (command.customerFullName() == null || command.customerContact() == null) {
+                if (customerId != null) {
+                    // Verify existing customer belongs to company
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "SELECT id FROM vrms_private.customers WHERE company_id = ? AND id = ?")) {
+                        ps.setObject(1, companyId);
+                        ps.setObject(2, customerId);
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (!rs.next()) {
+                                throw new IllegalArgumentException("Customer not found: " + customerId);
+                            }
+                        }
+                    }
+                    if (command.ageAtVisit() < 18 || command.ageAtVisit() > 120) {
+                        throw new IllegalArgumentException("Age at visit must be between 18 and 120 years.");
+                    }
+                } else {
+                    if (command.customerFullName() == null || command.customerFullName().isBlank() ||
+                        command.customerContact() == null || command.customerContact().isBlank()) {
                         throw new IllegalArgumentException("Customer details required for new customer booking.");
                     }
                     if (command.ageAtVisit() < 18 || command.ageAtVisit() > 120) {
@@ -399,8 +452,8 @@ public class JdbcBookingService implements BookingPort {
                 // Create visit linked to booking
                 visitId = UUID.randomUUID();
                 try (PreparedStatement ps = conn.prepareStatement(
-                        "INSERT INTO vrms_private.customer_visits (id, company_id, customer_id, visit_date, age_at_visit, visit_purpose) " +
-                        "VALUES (?, ?, ?, CURRENT_DATE, ?, ?)")) {
+                        "INSERT INTO vrms_private.customer_visits (id, company_id, customer_id, visit_date, age_at_visit, purpose) " +
+                        "VALUES (?, ?, ?, now(), ?, ?)")) {
                     ps.setObject(1, visitId);
                     ps.setObject(2, companyId);
                     ps.setObject(3, customerId);
@@ -526,6 +579,12 @@ public class JdbcBookingService implements BookingPort {
 
                 conn.commit();
 
+                if (idempotencyPort != null && idempotencyKey != null && !idempotencyKey.isBlank()) {
+                    try {
+                        idempotencyPort.recordCompletion(session, idempotencyKey, 201, bookingId.toString());
+                    } catch (Exception ignored) {}
+                }
+
                 return new BookingRecord(
                         bookingId,
                         companyId,
@@ -550,6 +609,11 @@ public class JdbcBookingService implements BookingPort {
                 );
             } catch (Exception e) {
                 conn.rollback();
+                if (idempotencyPort != null && idempotencyKey != null && !idempotencyKey.isBlank() && recordPendingNeeded) {
+                    try {
+                        idempotencyPort.recordFailure(session, idempotencyKey, 400, e.getMessage());
+                    } catch (Exception ignored) {}
+                }
                 throw e;
             }
         } catch (SQLException e) {

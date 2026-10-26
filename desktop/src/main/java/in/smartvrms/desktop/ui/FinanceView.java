@@ -68,6 +68,7 @@ public final class FinanceView extends JPanel {
     public final JLabel ledgerOperatingMarginLabel = Design.label("—", 16, Design.INK);
 
     private StaffSession session;
+    private in.smartvrms.desktop.integration.FinanceHttpClient client;
     public final List<PaymentRecord> specimensPayments = new ArrayList<>();
     public final List<BillingDocumentRecord> specimensDocs = new ArrayList<>();
 
@@ -85,6 +86,12 @@ public final class FinanceView extends JPanel {
         setSession(session);
     }
 
+    public void setClient(in.smartvrms.desktop.integration.FinanceHttpClient client) {
+        this.client = client;
+        boolean isAdmin = session != null && "ADMINISTRATOR".equals(session.role());
+        correctionBtn.setEnabled(isAdmin && client != null);
+    }
+
     public void setSession(StaffSession session) {
         this.session = session;
         boolean isAdmin = session != null && "ADMINISTRATOR".equals(session.role());
@@ -92,6 +99,7 @@ public final class FinanceView extends JPanel {
         correctionBtn.setToolTipText(isAdmin ? "Approve financial credit note or refund" : "Administrator role required (FR-ACC-003, FR-PAY-002)");
         updateLedgerView(isAdmin);
     }
+
 
     private void initUI() {
         // Top Header & Beta Notice
@@ -245,21 +253,53 @@ public final class FinanceView extends JPanel {
         correctionBtn.addActionListener(e -> showCorrectionDialog());
         downloadPdfBtn.addActionListener(e -> showDownloadPdfNotice());
         refreshBtn.addActionListener(e -> {
-            feedbackLabel.setText("Finance workspace refreshed.");
-            feedbackLabel.setForeground(COLOR_SUCCESS);
+            if (client != null && session != null && "ADMINISTRATOR".equals(session.role())) {
+                refreshBtn.setEnabled(false);
+                feedbackLabel.setText("Fetching authoritative ledger summary...");
+                new SwingWorker<LedgerSummary, Void>() {
+                    @Override
+                    protected LedgerSummary doInBackground() {
+                        return client.getLedgerSummary(null, null);
+                    }
+                    @Override
+                    protected void done() {
+                        refreshBtn.setEnabled(true);
+                        try {
+                            LedgerSummary s = get();
+                            revenueBilledLabel.setText(String.format("₹%.2f", s.totalRevenueEarnedPaise() / 100.0));
+                            cashReceivedLabel.setText(String.format("₹%.2f", s.totalCashCollectedPaise() / 100.0));
+                            balanceReceivableLabel.setText(String.format("₹%.2f", s.totalReceivablesPaise() / 100.0));
+                            depositHeldLabel.setText(String.format("₹%.2f", s.totalDepositLiabilityPaise() / 100.0));
+                            ledgerOperatingMarginLabel.setText(String.format("₹%.2f", s.operatingMarginPaise() / 100.0));
+                            feedbackLabel.setText("Finance workspace refreshed from authoritative ledger.");
+                            feedbackLabel.setForeground(COLOR_SUCCESS);
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Refresh failed: " + ex.getMessage());
+                            feedbackLabel.setForeground(COLOR_DANGER);
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Finance workspace refreshed.");
+                feedbackLabel.setForeground(COLOR_SUCCESS);
+            }
         });
     }
 
     private void showRecordPaymentDialog() {
-        JTextField bookingField = new JTextField(UUID.randomUUID().toString().substring(0, 8), 12);
+        JTextField bookingField = new JTextField(UUID.randomUUID().toString(), 24);
         JTextField amountField = new JTextField("2400.00", 8);
+        JTextField advanceField = new JTextField("1400.00", 8);
+        JTextField depositField = new JTextField("1000.00", 8);
         JComboBox<String> methodCombo = new JComboBox<>(new String[]{"CASH", "UPI", "BANK_TRANSFER", "CARD_POS"});
         JTextField refField = new JTextField("UTR" + System.currentTimeMillis() % 1000000, 12);
         JTextField evidenceField = new JTextField("Bank transaction reference verified", 16);
 
-        JPanel p = new JPanel(new GridLayout(5, 2, 8, 8));
-        p.add(new JLabel("Booking ID / Ref:")); p.add(bookingField);
-        p.add(new JLabel("Amount (INR):")); p.add(amountField);
+        JPanel p = new JPanel(new GridLayout(7, 2, 8, 8));
+        p.add(new JLabel("Booking ID (UUID):")); p.add(bookingField);
+        p.add(new JLabel("Total Amount (INR):")); p.add(amountField);
+        p.add(new JLabel("Allocate to Advance (INR):")); p.add(advanceField);
+        p.add(new JLabel("Allocate to Deposit (INR):")); p.add(depositField);
         p.add(new JLabel("Payment Method:")); p.add(methodCombo);
         p.add(new JLabel("External Reference / UTR:")); p.add(refField);
         p.add(new JLabel("Verification Evidence:")); p.add(evidenceField);
@@ -271,45 +311,130 @@ public final class FinanceView extends JPanel {
                 JOptionPane.showMessageDialog(this, "External reference / UTR is mandatory for verified tracking.", "Validation", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            paymentsTableModel.addRow(new Object[]{
-                    TIME_FMT.format(Instant.now()),
-                    methodCombo.getSelectedItem(),
-                    amountField.getText(),
-                    ref,
-                    evidenceField.getText(),
-                    session != null ? session.role() : "STAFF"
-            });
-            feedbackLabel.setText("Payment recorded: INR " + amountField.getText() + " (Ref: " + ref + ")");
-            feedbackLabel.setForeground(COLOR_SUCCESS);
+            long totalPaise;
+            long advPaise;
+            long depPaise;
+            UUID bookingId;
+            try {
+                totalPaise = Math.round(Double.parseDouble(amountField.getText().trim()) * 100);
+                advPaise = Math.round(Double.parseDouble(advanceField.getText().trim()) * 100);
+                depPaise = Math.round(Double.parseDouble(depositField.getText().trim()) * 100);
+                bookingId = UUID.fromString(bookingField.getText().trim());
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Invalid number or UUID format: " + ex.getMessage(), "Validation Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (client != null) {
+                recordPaymentBtn.setEnabled(false);
+                feedbackLabel.setText("Submitting payment to ledger API...");
+                feedbackLabel.setForeground(Design.MUTED);
+                new SwingWorker<PaymentRecord, Void>() {
+                    @Override
+                    protected PaymentRecord doInBackground() {
+                        var cmd = new in.smartvrms.contracts.RecordPaymentCommand(
+                                bookingId,
+                                null,
+                                totalPaise,
+                                (String) methodCombo.getSelectedItem(),
+                                ref,
+                                evidenceField.getText().trim(),
+                                "Manual payment entry",
+                                advPaise,
+                                depPaise
+                        );
+                        return client.recordVerifiedPayment(cmd);
+                    }
+                    @Override
+                    protected void done() {
+                        recordPaymentBtn.setEnabled(true);
+                        try {
+                            PaymentRecord rec = get();
+                            paymentsTableModel.addRow(new Object[]{
+                                    TIME_FMT.format(rec.verifiedAt()),
+                                    rec.paymentMethod(),
+                                    String.format("%.2f", rec.amountPaise() / 100.0),
+                                    rec.externalReference(),
+                                    rec.verificationEvidence(),
+                                    session != null ? session.role() : "STAFF"
+                            });
+                            feedbackLabel.setText("Payment recorded: INR " + String.format("%.2f", rec.amountPaise() / 100.0) + " (Ref: " + rec.externalReference() + ")");
+                            feedbackLabel.setForeground(COLOR_SUCCESS);
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Payment failed: " + ex.getMessage());
+                            feedbackLabel.setForeground(COLOR_DANGER);
+                            JOptionPane.showMessageDialog(FinanceView.this, "Payment registration failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Payment registration blocked: Financial API client not connected.");
+                feedbackLabel.setForeground(COLOR_DANGER);
+            }
         }
     }
+
 
     private void showIssueDocDialog() {
         JComboBox<String> typeCombo = new JComboBox<>(new String[]{"PRO_FORMA_INVOICE", "PAYMENT_RECEIPT", "QUOTATION", "ACCOUNT_STATEMENT"});
-        JTextField bookingField = new JTextField(UUID.randomUUID().toString().substring(0, 8), 12);
-        JTextField totalField = new JTextField("2400.00", 8);
+        JTextField bookingField = new JTextField(UUID.randomUUID().toString(), 24);
+        JTextField notesField = new JTextField("Issued by staff", 16);
 
         JPanel p = new JPanel(new GridLayout(3, 2, 8, 8));
         p.add(new JLabel("Document Type:")); p.add(typeCombo);
-        p.add(new JLabel("Booking ID:")); p.add(bookingField);
-        p.add(new JLabel("Total Billed (INR):")); p.add(totalField);
+        p.add(new JLabel("Booking ID (UUID):")); p.add(bookingField);
+        p.add(new JLabel("Notes:")); p.add(notesField);
 
         int opt = JOptionPane.showConfirmDialog(this, p, "Issue Billing Document (FR-BOOK-009, FR-PDF-001)", JOptionPane.OK_CANCEL_OPTION);
         if (opt == JOptionPane.OK_OPTION) {
-            String docNum = "VRMS-2026-DOC-" + (System.currentTimeMillis() % 10000);
-            docsTableModel.addRow(new Object[]{
-                    docNum,
-                    typeCombo.getSelectedItem(),
-                    totalField.getText(),
-                    "1200.00",
-                    "1200.00",
-                    TIME_FMT.format(Instant.now()),
-                    "ISSUED"
-            });
-            feedbackLabel.setText("Document issued: " + docNum + " (" + typeCombo.getSelectedItem() + ")");
-            feedbackLabel.setForeground(COLOR_SUCCESS);
+            UUID bookingId;
+            try {
+                bookingId = UUID.fromString(bookingField.getText().trim());
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Invalid Booking UUID: " + ex.getMessage(), "Validation Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String docType = (String) typeCombo.getSelectedItem();
+            String notes = notesField.getText().trim();
+
+            if (client != null) {
+                issueDocBtn.setEnabled(false);
+                feedbackLabel.setText("Generating document with PDFBox...");
+                new SwingWorker<BillingDocumentRecord, Void>() {
+                    @Override
+                    protected BillingDocumentRecord doInBackground() {
+                        return client.issueBillingDocument(bookingId, docType, notes);
+                    }
+                    @Override
+                    protected void done() {
+                        issueDocBtn.setEnabled(true);
+                        try {
+                            BillingDocumentRecord doc = get();
+                            docsTableModel.addRow(new Object[]{
+                                    doc.documentNumber(),
+                                    doc.documentType(),
+                                    String.format("%.2f", doc.totalPaise() / 100.0),
+                                    String.format("%.2f", doc.advancePaidPaise() / 100.0),
+                                    String.format("%.2f", doc.balanceDuePaise() / 100.0),
+                                    TIME_FMT.format(doc.issuedAt()),
+                                    doc.status()
+                            });
+                            feedbackLabel.setText("Document issued: " + doc.documentNumber() + " (" + doc.documentType() + ")");
+                            feedbackLabel.setForeground(COLOR_SUCCESS);
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Issue failed: " + ex.getMessage());
+                            feedbackLabel.setForeground(COLOR_DANGER);
+                            JOptionPane.showMessageDialog(FinanceView.this, "Failed to issue document: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Document issuance blocked: Financial API client not connected.");
+                feedbackLabel.setForeground(COLOR_DANGER);
+            }
         }
     }
+
 
     private void showQrDialog() {
         String vpa = "payments@smartvrms";
@@ -325,55 +450,181 @@ public final class FinanceView extends JPanel {
     }
 
     private void showManageDepositDialog() {
+        JTextField bookingField = new JTextField(UUID.randomUUID().toString(), 24);
         JComboBox<String> actionCombo = new JComboBox<>(new String[]{"REFUND", "APPLY"});
         JTextField amountField = new JTextField("1000.00", 8);
         JTextField reasonField = new JTextField("Safe return with no damages", 16);
 
-        JPanel p = new JPanel(new GridLayout(3, 2, 8, 8));
+        JPanel p = new JPanel(new GridLayout(4, 2, 8, 8));
+        p.add(new JLabel("Booking ID (UUID):")); p.add(bookingField);
         p.add(new JLabel("Action:")); p.add(actionCombo);
         p.add(new JLabel("Amount (INR):")); p.add(amountField);
         p.add(new JLabel("Reason:")); p.add(reasonField);
 
         int opt = JOptionPane.showConfirmDialog(this, p, "Manage Security Deposit (FR-FIN-001, FR-PAY-002)", JOptionPane.OK_CANCEL_OPTION);
         if (opt == JOptionPane.OK_OPTION) {
-            feedbackLabel.setText("Security deposit " + actionCombo.getSelectedItem() + " processed: INR " + amountField.getText());
-            feedbackLabel.setForeground(COLOR_SUCCESS);
+            UUID bookingId;
+            long amountPaise;
+            try {
+                bookingId = UUID.fromString(bookingField.getText().trim());
+                amountPaise = Math.round(Double.parseDouble(amountField.getText().trim()) * 100);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Invalid UUID or Amount: " + ex.getMessage(), "Validation Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String action = (String) actionCombo.getSelectedItem();
+            String reason = reasonField.getText().trim();
+
+            if (client != null) {
+                manageDepositBtn.setEnabled(false);
+                feedbackLabel.setText("Processing deposit ledger adjustment...");
+                new SwingWorker<RefundableDepositRecord, Void>() {
+                    @Override
+                    protected RefundableDepositRecord doInBackground() {
+                        return client.manageDeposit(bookingId, action, amountPaise, reason);
+                    }
+                    @Override
+                    protected void done() {
+                        manageDepositBtn.setEnabled(true);
+                        try {
+                            RefundableDepositRecord dep = get();
+                            feedbackLabel.setText("Security deposit " + action + " processed: INR " + String.format("%.2f", amountPaise / 100.0) + " (Remaining: INR " + String.format("%.2f", dep.remainingHeldPaise() / 100.0) + ")");
+                            feedbackLabel.setForeground(COLOR_SUCCESS);
+                            depositHeldLabel.setText("₹" + String.format("%.2f", dep.remainingHeldPaise() / 100.0));
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Deposit action failed: " + ex.getMessage());
+                            feedbackLabel.setForeground(COLOR_DANGER);
+                            JOptionPane.showMessageDialog(FinanceView.this, "Deposit action failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Deposit action blocked: Financial API client not connected.");
+                feedbackLabel.setForeground(COLOR_DANGER);
+            }
         }
     }
+
 
     private void showCorrectionDialog() {
         if (session == null || !"ADMINISTRATOR".equals(session.role())) {
             JOptionPane.showMessageDialog(this, "Only Administrators can approve financial credit notes or refunds (FR-ACC-003, FR-PAY-002).", "Access Denied", JOptionPane.ERROR_MESSAGE);
             return;
         }
+        JTextField bookingField = new JTextField(UUID.randomUUID().toString(), 24);
         JComboBox<String> typeCombo = new JComboBox<>(new String[]{"CREDIT_NOTE", "REFUND"});
         JTextField amountField = new JTextField("500.00", 8);
         JTextField reasonField = new JTextField("Approved goodwill discount", 16);
 
-        JPanel p = new JPanel(new GridLayout(3, 2, 8, 8));
+        JPanel p = new JPanel(new GridLayout(4, 2, 8, 8));
+        p.add(new JLabel("Booking ID (UUID):")); p.add(bookingField);
         p.add(new JLabel("Correction Type:")); p.add(typeCombo);
         p.add(new JLabel("Amount (INR):")); p.add(amountField);
         p.add(new JLabel("Reason:")); p.add(reasonField);
 
         int opt = JOptionPane.showConfirmDialog(this, p, "Authorize Financial Correction (Administrator Only)", JOptionPane.OK_CANCEL_OPTION);
         if (opt == JOptionPane.OK_OPTION) {
-            feedbackLabel.setText("Financial correction authorized: " + typeCombo.getSelectedItem() + " INR " + amountField.getText());
-            feedbackLabel.setForeground(COLOR_SUCCESS);
+            UUID bookingId;
+            long amountPaise;
+            try {
+                bookingId = UUID.fromString(bookingField.getText().trim());
+                amountPaise = Math.round(Double.parseDouble(amountField.getText().trim()) * 100);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Invalid UUID or Amount: " + ex.getMessage(), "Validation Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            String type = (String) typeCombo.getSelectedItem();
+            String reason = reasonField.getText().trim();
+
+            if (client != null) {
+                correctionBtn.setEnabled(false);
+                feedbackLabel.setText("Posting authorized correction to ledger...");
+                new SwingWorker<FinancialCorrectionRecord, Void>() {
+                    @Override
+                    protected FinancialCorrectionRecord doInBackground() {
+                        var cmd = new in.smartvrms.contracts.FinancialCorrectionCommand(
+                                bookingId,
+                                null,
+                                type,
+                                amountPaise,
+                                reason,
+                                "BANK-REF-CORR"
+                        );
+                        return client.approveCorrection(cmd);
+                    }
+                    @Override
+                    protected void done() {
+                        correctionBtn.setEnabled(true);
+                        try {
+                            FinancialCorrectionRecord corr = get();
+                            feedbackLabel.setText("Financial correction authorized: " + corr.correctionType() + " INR " + String.format("%.2f", corr.amountPaise() / 100.0));
+                            feedbackLabel.setForeground(COLOR_SUCCESS);
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Correction authorization failed: " + ex.getMessage());
+                            feedbackLabel.setForeground(COLOR_DANGER);
+                            JOptionPane.showMessageDialog(FinanceView.this, "Correction failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Financial correction blocked: Financial API client not connected.");
+                feedbackLabel.setForeground(COLOR_DANGER);
+            }
         }
     }
 
     private void showDownloadPdfNotice() {
+        if (client == null) {
+            feedbackLabel.setText("PDF download blocked: Financial API client not connected.");
+            feedbackLabel.setForeground(COLOR_DANGER);
+            return;
+        }
         int row = docsTable.getSelectedRow();
-        String docNum = (row >= 0) ? (String) docsTable.getValueAt(row, 0) : "VRMS-2026-DOC-SAMPLE";
-        feedbackLabel.setText("PDF document rendered successfully for " + docNum);
-        feedbackLabel.setForeground(COLOR_SUCCESS);
-        JOptionPane.showMessageDialog(this,
-                "PDF Rendered: " + docNum + ".pdf\n" +
-                "Engine: Apache PDFBox 3.0.3 (DEP-03 approved)\n" +
-                "Banner: [BETA PRO-FORMA / NOT AN OFFICIAL GST TAX INVOICE]\n" +
-                "All totals reconcile with immutable ledger postings.",
-                "Financial PDF Export",
-                JOptionPane.INFORMATION_MESSAGE);
+        String docIdStr = (row >= 0 && row < specimensDocs.size()) ? specimensDocs.get(row).id().toString() : null;
+        if (docIdStr == null) {
+            docIdStr = JOptionPane.showInputDialog(this, "Enter Document ID (UUID) to download authoritative PDF:", "");
+            if (docIdStr == null || docIdStr.isBlank()) return;
+        }
+        final UUID documentId;
+        try {
+            documentId = UUID.fromString(docIdStr.trim());
+        } catch (Exception ex) {
+            feedbackLabel.setText("Invalid Document UUID format.");
+            feedbackLabel.setForeground(COLOR_DANGER);
+            return;
+        }
+        downloadPdfBtn.setEnabled(false);
+        feedbackLabel.setText("Downloading PDF from server...");
+        feedbackLabel.setForeground(Design.INK);
+
+        new SwingWorker<byte[], Void>() {
+            @Override
+            protected byte[] doInBackground() {
+                return client.downloadDocumentPdf(documentId);
+            }
+
+            @Override
+            protected void done() {
+                downloadPdfBtn.setEnabled(true);
+                try {
+                    byte[] pdfBytes = get();
+                    JFileChooser chooser = new JFileChooser();
+                    chooser.setSelectedFile(new java.io.File("document-" + documentId.toString().substring(0, 8) + ".pdf"));
+                    int ret = chooser.showSaveDialog(FinanceView.this);
+                    if (ret == JFileChooser.APPROVE_OPTION) {
+                        java.nio.file.Files.write(chooser.getSelectedFile().toPath(), pdfBytes);
+                        feedbackLabel.setText("PDF saved successfully (" + pdfBytes.length + " bytes).");
+                        feedbackLabel.setForeground(COLOR_SUCCESS);
+                    } else {
+                        feedbackLabel.setText("PDF download saved: " + pdfBytes.length + " bytes received.");
+                        feedbackLabel.setForeground(COLOR_SUCCESS);
+                    }
+                } catch (Exception ex) {
+                    feedbackLabel.setText("Failed to download PDF: " + ex.getMessage());
+                    feedbackLabel.setForeground(COLOR_DANGER);
+                }
+            }
+        }.execute();
     }
 
     private void populateSpecimens() {
@@ -381,6 +632,11 @@ public final class FinanceView extends JPanel {
         cashReceivedLabel.setText("₹8,200.00");
         balanceReceivableLabel.setText("₹4,200.00");
         depositHeldLabel.setText("₹5,000.00");
+
+        paymentsTableModel.setRowCount(0);
+        docsTableModel.setRowCount(0);
+        specimensPayments.clear();
+        specimensDocs.clear();
 
         paymentsTableModel.addRow(new Object[]{
                 TIME_FMT.format(Instant.now().minusSeconds(86400 * 2)),
@@ -417,5 +673,8 @@ public final class FinanceView extends JPanel {
                 TIME_FMT.format(Instant.now().minusSeconds(86400)),
                 "ISSUED"
         });
+
+        feedbackLabel.setText("Preview fixtures: Connect Finance API to load live company ledger.");
+        feedbackLabel.setForeground(Design.MUTED);
     }
 }

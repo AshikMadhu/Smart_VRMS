@@ -5,6 +5,8 @@ import in.smartvrms.application.port.CustomerPort;
 import in.smartvrms.contracts.CustomerRecord;
 import in.smartvrms.contracts.CustomerVisitRecord;
 import in.smartvrms.contracts.StaffSession;
+import in.smartvrms.server.security.Capability;
+import in.smartvrms.server.security.JdbcStaffContext;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -18,6 +20,10 @@ public final class JdbcCustomerService implements CustomerPort {
     public JdbcCustomerService(DataSource dataSource, AuditPort auditPort) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.auditPort = auditPort;
+    }
+
+    public JdbcCustomerService(DataSource dataSource) {
+        this(dataSource, null);
     }
 
     @Override
@@ -50,7 +56,7 @@ public final class JdbcCustomerService implements CustomerPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.BOOK_STANDARD_RENTAL);
                 CustomerRecord customer;
                 try (PreparedStatement s = c.prepareStatement(custSql)) {
                     s.setObject(1, session.companyId());
@@ -103,7 +109,7 @@ public final class JdbcCustomerService implements CustomerPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.VIEW_CUSTOMER_RECORDS);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setString(2, query != null ? query.strip() : null);
@@ -152,7 +158,7 @@ public final class JdbcCustomerService implements CustomerPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.UPDATE_CUSTOMER_OPERATIONS);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, customerId);
@@ -191,7 +197,7 @@ public final class JdbcCustomerService implements CustomerPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.VIEW_CUSTOMER_RECORDS);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, customerId);
@@ -219,13 +225,67 @@ public final class JdbcCustomerService implements CustomerPort {
         return Collections.unmodifiableList(list);
     }
 
-    private static void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement(
-                "SELECT set_config('vrms.user_id', ?, true), set_config('vrms.company_id', ?, true), set_config('vrms.role', ?, true)")) {
-            s.setString(1, session.userId().toString());
-            s.setString(2, session.companyId().toString());
-            s.setString(3, session.role());
-            s.execute();
+    @Override
+    public Optional<CustomerRecord> findDuplicateCustomer(StaffSession session, String mobile, String email) {
+        Objects.requireNonNull(session, "session");
+        if ((mobile == null || mobile.isBlank()) && (email == null || email.isBlank())) {
+            return Optional.empty();
         }
+
+        String sql = """
+            SELECT id, company_id, full_name, mobile_number, email, address, created_at, version
+            FROM vrms_private.customers
+            WHERE company_id = ?
+              AND (
+                (? IS NOT NULL AND mobile_number = ?)
+                OR (? IS NOT NULL AND email IS NOT NULL AND LOWER(email) = LOWER(?))
+              )
+            LIMIT 1
+            """;
+
+        try (Connection c = dataSource.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                setContext(c, session, Capability.VIEW_CUSTOMER_RECORDS);
+                try (PreparedStatement s = c.prepareStatement(sql)) {
+                    String normMobile = mobile != null && !mobile.isBlank() ? mobile.strip() : null;
+                    String normEmail = email != null && !email.isBlank() ? email.strip() : null;
+
+                    s.setObject(1, session.companyId());
+                    s.setString(2, normMobile);
+                    s.setString(3, normMobile);
+                    s.setString(4, normEmail);
+                    s.setString(5, normEmail);
+
+                    try (ResultSet r = s.executeQuery()) {
+                        if (r.next()) {
+                            CustomerRecord rec = new CustomerRecord(
+                                r.getObject("id", UUID.class),
+                                r.getObject("company_id", UUID.class),
+                                r.getString("full_name"),
+                                r.getString("mobile_number"),
+                                r.getString("email"),
+                                r.getString("address"),
+                                r.getTimestamp("created_at").toInstant(),
+                                r.getLong("version")
+                            );
+                            c.commit();
+                            return Optional.of(rec);
+                        }
+                    }
+                }
+                c.commit();
+            } catch (Exception e) {
+                c.rollback();
+                throw new RuntimeException("Failed to find duplicate customer", e);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Database error finding duplicate customer", e);
+        }
+        return Optional.empty();
+    }
+
+    private static void setContext(Connection c, StaffSession session, Capability capability) throws SQLException {
+        JdbcStaffContext.require(c, session, capability);
     }
 }

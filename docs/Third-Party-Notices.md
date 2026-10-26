@@ -29,9 +29,11 @@ The desktop installer and distribution bundle (`dist/package-win64/SmartVRMS/app
 - `contracts-0.1.0-SNAPSHOT.jar`
 - `application-0.1.0-SNAPSHOT.jar`
 - `desktop-0.1.0-SNAPSHOT.jar`
+- `gson-2.15.0.jar`
+- `error_prone_annotations-2.50.0.jar`
 - `SmartVRMS.cfg`
 
-**Zero server JARs, zero JDBC drivers, and zero database credentials or Auth-admin secrets are distributed in the desktop client bundle.**
+**Zero server JARs, zero PostgreSQL JDBC drivers, zero PDFBox/ZXing libraries, zero private keys, and zero database credentials or Auth-admin secrets are distributed in the desktop client bundle.**
 
 ---
 

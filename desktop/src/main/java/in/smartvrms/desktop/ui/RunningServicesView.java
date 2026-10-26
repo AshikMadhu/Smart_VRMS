@@ -1,14 +1,18 @@
 package in.smartvrms.desktop.ui;
 
+import in.smartvrms.contracts.BookingRecord;
 import in.smartvrms.contracts.CustodyRecord;
 import in.smartvrms.contracts.ExtensionQuote;
+import in.smartvrms.contracts.MaintenanceCaseRecord;
 import in.smartvrms.contracts.RunningAssignmentSummary;
 import in.smartvrms.contracts.RunningServiceSummary;
 import in.smartvrms.contracts.StaffSession;
+import in.smartvrms.desktop.integration.OperationsHttpClient;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -48,6 +52,7 @@ public final class RunningServicesView extends JPanel {
     public final JLabel feedbackLabel = Design.label("", 12, Design.MUTED);
 
     private StaffSession session;
+    private OperationsHttpClient client;
     private final List<RunningServiceSummary> currentSummaries = new ArrayList<>();
     private final List<RunningServiceSummary> visibleSummaries = new ArrayList<>();
     private RunningServiceSummary selectedSummary;
@@ -152,15 +157,20 @@ public final class RunningServicesView extends JPanel {
         this.session = session;
     }
 
+    public void setClient(OperationsHttpClient client) {
+        this.client = client;
+        refreshQueue();
+    }
+
     private void initMockSpecimens() {
         currentSummaries.clear();
         servicesListModel.clear();
         visibleSummaries.clear();
 
         Instant now = Instant.now();
-        Instant pastStart = now.minus(java.time.Duration.ofHours(30));
-        Instant pastEnd = now.minus(java.time.Duration.ofHours(6)); // Overdue
-        Instant futureEnd = now.plus(java.time.Duration.ofHours(18));
+        Instant pastStart = now.minus(Duration.ofHours(30));
+        Instant pastEnd = now.minus(Duration.ofHours(6)); // Overdue
+        Instant futureEnd = now.plus(Duration.ofHours(18));
 
         // Specimen 1: Overdue active rental
         UUID bId1 = UUID.randomUUID();
@@ -180,22 +190,52 @@ public final class RunningServicesView extends JPanel {
         UUID cId2 = UUID.randomUUID();
         RunningAssignmentSummary a21 = new RunningAssignmentSummary(
                 UUID.randomUUID(), UUID.randomUUID(), "KL-01-AB-1234", "CAR",
-                null, null, now.minus(java.time.Duration.ofHours(12)), futureEnd, "CHECKED_OUT", "CHECKED_OUT", "PENDING"
+                null, null, now.minus(Duration.ofHours(12)), futureEnd, "CHECKED_OUT", "CHECKED_OUT", "PENDING"
         );
         RunningAssignmentSummary a22 = new RunningAssignmentSummary(
                 UUID.randomUUID(), UUID.randomUUID(), "KL-01-EF-5678", "BIKE",
-                null, null, now.minus(java.time.Duration.ofHours(12)), futureEnd, "RESERVED", "RESERVED", null
+                null, null, now.minus(Duration.ofHours(12)), futureEnd, "RESERVED", "RESERVED", null
         );
         RunningServiceSummary s2 = new RunningServiceSummary(
                 bId2, "VRMS-BK-0102", cId2, "Sita Lakshmi", "+91 94471 55667", UUID.randomUUID(),
-                "ACTIVE", now.minus(java.time.Duration.ofHours(12)), futureEnd, false, 2,
+                "ACTIVE", now.minus(Duration.ofHours(12)), futureEnd, false, 2,
                 List.of("KL-01-AB-1234", "KL-01-EF-5678"), List.of(),
-                800000L, 400000L, 400000L, List.of(a21, a22)
+                800000L, 800000L, 0L, List.of(a21, a22)
         );
 
         currentSummaries.add(s1);
         currentSummaries.add(s2);
         populateList(false);
+        feedbackLabel.setText("Preview fixtures: Connect Operations API to load live rentals.");
+    }
+
+
+    public void refreshQueue() {
+        boolean overdueOnly = filterCombo.getSelectedIndex() == 1;
+        if (client != null) {
+            new SwingWorker<List<RunningServiceSummary>, Void>() {
+                @Override
+                protected List<RunningServiceSummary> doInBackground() {
+                    return client.listRunningServices(overdueOnly);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        List<RunningServiceSummary> list = get();
+                        currentSummaries.clear();
+                        currentSummaries.addAll(list);
+                        populateList(overdueOnly);
+                        feedbackLabel.setText("Queue updated from server (" + list.size() + " running services).");
+                    } catch (Exception ex) {
+                        feedbackLabel.setText("Queue refresh error: " + ex.getMessage());
+                    }
+                }
+            }.execute();
+        } else {
+            feedbackLabel.setText("Queue refreshed from live database.");
+            populateList(overdueOnly);
+        }
     }
 
     private void populateList(boolean overdueOnly) {
@@ -216,13 +256,14 @@ public final class RunningServicesView extends JPanel {
     private void setupListeners() {
         filterCombo.addActionListener(e -> {
             boolean overdueOnly = filterCombo.getSelectedIndex() == 1;
-            populateList(overdueOnly);
+            if (client != null) {
+                refreshQueue();
+            } else {
+                populateList(overdueOnly);
+            }
         });
 
-        refreshButton.addActionListener(e -> {
-            feedbackLabel.setText("Queue refreshed from live database.");
-            populateList(filterCombo.getSelectedIndex() == 1);
-        });
+        refreshButton.addActionListener(e -> refreshQueue());
 
         servicesList.addListSelectionListener(e -> {
             int idx = servicesList.getSelectedIndex();
@@ -292,9 +333,44 @@ public final class RunningServicesView extends JPanel {
 
         int res = JOptionPane.showConfirmDialog(this, p, "Record Vehicle Checkout — " + a.registrationPlate(), JOptionPane.OK_CANCEL_OPTION);
         if (res == JOptionPane.OK_OPTION) {
-            feedbackLabel.setText("Checkout recorded for " + a.registrationPlate() + " at " + TIME_FMT.format(Instant.now()) + " (Status: CHECKED_OUT).");
+            int odo;
+            int fuel;
+            try {
+                odo = Integer.parseInt(odoField.getText().trim());
+                fuel = Integer.parseInt(fuelField.getText().trim());
+            } catch (NumberFormatException ex) {
+                feedbackLabel.setText("Invalid numeric values for odometer or fuel.");
+                return;
+            }
+            String notes = notesField.getText().trim();
+
+            if (client != null) {
+                checkoutButton.setEnabled(false);
+                feedbackLabel.setText("Submitting checkout to server...");
+                new SwingWorker<CustodyRecord, Void>() {
+                    @Override
+                    protected CustodyRecord doInBackground() {
+                        return client.recordCheckout(a.assignmentId(), Instant.now(), odo, fuel, notes);
+                    }
+
+                    @Override
+                    protected void done() {
+                        checkoutButton.setEnabled(true);
+                        try {
+                            CustodyRecord rec = get();
+                            feedbackLabel.setText("Checkout recorded for " + a.registrationPlate() + " at " + TIME_FMT.format(rec.checkoutTime()) + " (Status: CHECKED_OUT).");
+                            refreshQueue();
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Checkout failed: " + ex.getMessage());
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Action blocked: Operations API client not connected.");
+            }
         }
     }
+
 
     private void executeReturnDialog() {
         if (selectedSummary == null) {
@@ -329,14 +405,52 @@ public final class RunningServicesView extends JPanel {
 
         int res = JOptionPane.showConfirmDialog(this, p, "Record Return Inspection — " + a.registrationPlate(), JOptionPane.OK_CANCEL_OPTION);
         if (res == JOptionPane.OK_OPTION) {
+            int odo;
+            int fuel;
+            try {
+                odo = Integer.parseInt(odoField.getText().trim());
+                fuel = Integer.parseInt(fuelField.getText().trim());
+            } catch (NumberFormatException ex) {
+                feedbackLabel.setText("Invalid numeric values for odometer or fuel.");
+                return;
+            }
             String cond = (String) condCombo.getSelectedItem();
-            if ("ACCEPTABLE".equals(cond)) {
-                feedbackLabel.setText("Return inspection ACCEPTABLE: " + a.registrationPlate() + " released for future rentals (FR-OPS-003). Debt remains visible.");
+            String notes = notesField.getText().trim();
+
+            if (client != null) {
+                returnButton.setEnabled(false);
+                feedbackLabel.setText("Submitting return inspection to server...");
+                new SwingWorker<CustodyRecord, Void>() {
+                    @Override
+                    protected CustodyRecord doInBackground() {
+                        return client.recordReturnInspection(
+                                a.assignmentId(), Instant.now(), odo, fuel, cond, notes, null,
+                                "DAMAGED".equals(cond) ? "CUSTOMER_DAMAGE" : "ORDINARY_WEAR", 0, 0
+                        );
+                    }
+
+                    @Override
+                    protected void done() {
+                        returnButton.setEnabled(true);
+                        try {
+                            get();
+                            if ("ACCEPTABLE".equals(cond)) {
+                                feedbackLabel.setText("Return inspection ACCEPTABLE: " + a.registrationPlate() + " released for future rentals (FR-OPS-003). Debt remains visible.");
+                            } else {
+                                feedbackLabel.setText("Return inspection DAMAGED: " + a.registrationPlate() + " BLOCKED with active maintenance restriction (FR-DMG-003).");
+                            }
+                            refreshQueue();
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Return inspection failed: " + ex.getMessage());
+                        }
+                    }
+                }.execute();
             } else {
-                feedbackLabel.setText("Return inspection DAMAGED: " + a.registrationPlate() + " BLOCKED with active maintenance restriction (FR-DMG-003).");
+                feedbackLabel.setText("Action blocked: Operations API client not connected.");
             }
         }
     }
+
 
     private void executeExtensionDialog() {
         if (selectedSummary == null) {
@@ -354,15 +468,88 @@ public final class RunningServicesView extends JPanel {
 
         int res = JOptionPane.showConfirmDialog(this, p, "Extend Booking — #" + selectedSummary.bookingNumber(), JOptionPane.OK_CANCEL_OPTION);
         if (res == JOptionPane.OK_OPTION) {
-            feedbackLabel.setText("Extension approved at saved rates (FR-EXT-002): Full period repriced with delta charge, zero duplicate first-day fee.");
+            int days;
+            try {
+                days = Integer.parseInt(daysField.getText().trim());
+                if (days <= 0) throw new NumberFormatException();
+            } catch (NumberFormatException ex) {
+                feedbackLabel.setText("Enter a positive whole number of days.");
+                return;
+            }
+            String reason = reasonField.getText().trim();
+            Instant revisedEndTime = selectedSummary.endTime().plus(Duration.ofDays(days));
+
+            if (client != null) {
+                extendButton.setEnabled(false);
+                feedbackLabel.setText("Calculating extension quote at saved rates...");
+                new SwingWorker<ExtensionQuote, Void>() {
+                    @Override
+                    protected ExtensionQuote doInBackground() {
+                        return client.quoteExtension(selectedSummary.bookingId(), null, revisedEndTime, reason);
+                    }
+
+                    @Override
+                    protected void done() {
+                        try {
+                            ExtensionQuote quote = get();
+                            long deltaRs = quote.totalDeltaPaise() / 100;
+                            int confirm = JOptionPane.showConfirmDialog(
+                                    RunningServicesView.this,
+                                    "Extension Repricing Summary (Saved Rate Version):\n" +
+                                            "• Extended Duration: +" + days + " day(s)\n" +
+                                            "• Revised End: " + TIME_FMT.format(quote.revisedEndTime()) + "\n" +
+                                            "• Itemized Delta Charge: ₹" + deltaRs + "\n" +
+                                            "• Duplicate 24h min fee: None (FR-EXT-002)\n\n" +
+                                            "Confirm extension?",
+                                    "Confirm Extension — #" + selectedSummary.bookingNumber(),
+                                    JOptionPane.OK_CANCEL_OPTION
+                            );
+
+                            if (confirm == JOptionPane.OK_OPTION) {
+                                new SwingWorker<BookingRecord, Void>() {
+                                    @Override
+                                    protected BookingRecord doInBackground() {
+                                        return client.extendAssignments(selectedSummary.bookingId(), null, revisedEndTime, reason);
+                                    }
+
+                                    @Override
+                                    protected void done() {
+                                        extendButton.setEnabled(true);
+                                        try {
+                                            get();
+                                            feedbackLabel.setText("Extension approved at saved rates (FR-EXT-002): Repriced with delta ₹" + deltaRs + ", zero duplicate first-day fee.");
+                                            refreshQueue();
+                                        } catch (Exception ex) {
+                                            feedbackLabel.setText("Extension confirmation failed: " + ex.getMessage());
+                                        }
+                                    }
+                                }.execute();
+                            } else {
+                                extendButton.setEnabled(true);
+                                feedbackLabel.setText("Extension cancelled.");
+                            }
+                        } catch (Exception ex) {
+                            extendButton.setEnabled(true);
+                            feedbackLabel.setText("Extension quoting failed: " + ex.getMessage());
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Action blocked: Operations API client not connected.");
+            }
         }
     }
+
 
     private void executeMaintenanceDialog() {
         if (selectedSummary == null) {
             feedbackLabel.setText("Select a booking first.");
             return;
         }
+        int assignIdx = assignmentsList.getSelectedIndex();
+        RunningAssignmentSummary a = (assignIdx >= 0 && assignIdx < selectedSummary.assignments().size())
+                ? selectedSummary.assignments().get(assignIdx) : null;
+
         JComboBox<String> issueCombo = new JComboBox<>(new String[]{"CUSTOMER_DAMAGE", "ORDINARY_WEAR", "ROUTINE_SERVICE", "BREAKDOWN"});
         JTextField estField = new JTextField("15000"); // 150 INR in paise or 15000 paise
         JTextField notesField = new JTextField("Scratch on rear bumper during return.");
@@ -377,7 +564,48 @@ public final class RunningServicesView extends JPanel {
 
         int res = JOptionPane.showConfirmDialog(this, p, "Open Damage/Maintenance Case", JOptionPane.OK_CANCEL_OPTION);
         if (res == JOptionPane.OK_OPTION) {
-            feedbackLabel.setText("Maintenance case opened (FR-DMG-001). Vehicle placed under active maintenance restriction.");
+            String issue = (String) issueCombo.getSelectedItem();
+            long estCost;
+            try {
+                estCost = Long.parseLong(estField.getText().trim());
+            } catch (NumberFormatException ex) {
+                feedbackLabel.setText("Invalid numeric value for estimated repair cost.");
+                return;
+            }
+            String notes = notesField.getText().trim();
+            UUID vehicleId = a != null ? a.vehicleId() : (selectedSummary.assignments().isEmpty() ? null : selectedSummary.assignments().get(0).vehicleId());
+            UUID assignmentId = a != null ? a.assignmentId() : null;
+
+            if (vehicleId == null) {
+                feedbackLabel.setText("No vehicle associated with the selection.");
+                return;
+            }
+
+            if (client != null) {
+                maintenanceButton.setEnabled(false);
+                feedbackLabel.setText("Opening maintenance case on server...");
+                new SwingWorker<MaintenanceCaseRecord, Void>() {
+                    @Override
+                    protected MaintenanceCaseRecord doInBackground() {
+                        long recovery = "ORDINARY_WEAR".equalsIgnoreCase(issue) ? 0L : 0L;
+                        return client.openMaintenanceCase(vehicleId, assignmentId, null, issue, estCost, recovery, notes, null);
+                    }
+
+                    @Override
+                    protected void done() {
+                        maintenanceButton.setEnabled(true);
+                        try {
+                            get();
+                            feedbackLabel.setText("Maintenance case opened (FR-DMG-001). Vehicle placed under active maintenance restriction.");
+                            refreshQueue();
+                        } catch (Exception ex) {
+                            feedbackLabel.setText("Maintenance case failed: " + ex.getMessage());
+                        }
+                    }
+                }.execute();
+            } else {
+                feedbackLabel.setText("Action blocked: Operations API client not connected.");
+            }
         }
     }
 }

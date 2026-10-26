@@ -12,4 +12,7 @@ public interface CustomerPort {
     List<CustomerRecord> searchCustomers(StaffSession session, String query);
     CustomerVisitRecord recordRepeatVisit(StaffSession session, UUID customerId, int ageAtVisit, String bookingContext);
     List<CustomerVisitRecord> getVisitHistory(StaffSession session, UUID customerId);
+    default java.util.Optional<CustomerRecord> findDuplicateCustomer(StaffSession session, String mobile, String email) {
+        return java.util.Optional.empty();
+    }
 }

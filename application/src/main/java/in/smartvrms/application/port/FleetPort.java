@@ -23,6 +23,9 @@ public interface FleetPort {
     Optional<VehicleRecord> getVehicle(StaffSession session, UUID vehicleId);
     AssetRestrictionRecord freezeAsset(StaffSession session, String assetType, UUID assetId, String reason, Instant startTime, Instant endTime);
     void resolveAssetRestriction(StaffSession session, UUID restrictionId);
+    default List<AssetRestrictionRecord> listAssetRestrictions(StaffSession session, String assetType, UUID assetId) {
+        return List.of();
+    }
     VehicleDocumentRecord addVehicleDocument(StaffSession session, UUID vehicleId, String docType, UUID fileId, LocalDate issueDate, LocalDate expiryDate);
     List<VehicleDocumentRecord> getVehicleDocuments(StaffSession session, UUID vehicleId);
 }

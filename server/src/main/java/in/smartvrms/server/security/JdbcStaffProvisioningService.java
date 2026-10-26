@@ -10,10 +10,32 @@ import java.time.Instant;
 import java.util.*;
 
 public final class JdbcStaffProvisioningService implements StaffProvisioningPort {
+    @FunctionalInterface
+    public interface InviteProvider {
+        UUID invite(String email, String fullName);
+    }
+
     private final DataSource dataSource;
+    private final InviteProvider inviteProvider;
 
     public JdbcStaffProvisioningService(DataSource dataSource) {
+        this(dataSource, (email, fullName) -> {
+            throw new IllegalStateException("Employee invitation service unavailable: Supabase service-role secret is not configured.");
+        });
+    }
+
+    public JdbcStaffProvisioningService(DataSource dataSource, InviteProvider inviteProvider) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        this.inviteProvider = Objects.requireNonNull(inviteProvider, "inviteProvider");
+    }
+
+    public static InviteProvider createSupabaseInviteProvider(java.net.URI endpoint, String serviceRoleKey) {
+        if (endpoint == null || serviceRoleKey == null || serviceRoleKey.isBlank()) {
+            return (email, fullName) -> {
+                throw new IllegalStateException("Employee invitation service unavailable: Supabase service-role secret is not configured.");
+            };
+        }
+        return new SupabaseAdminInviteProvider(endpoint, serviceRoleKey);
     }
 
     @Override
@@ -24,7 +46,7 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
             throw new SecurityException("Forbidden: Only administrators can invite employees");
         }
 
-        UUID newUserId = inviteThroughProvider(email, fullName);
+        UUID newUserId = inviteProvider.invite(email, fullName);
         String sql = """
             INSERT INTO vrms_private.memberships (auth_user_id, company_id, role, active, created_by)
             VALUES (?, ?, 'EMPLOYEE', true, ?)
@@ -39,7 +61,7 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                JdbcStaffContext.require(c, session, Capability.INVITE_EMPLOYEE);
                 MemberManagementRecord record;
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, newUserId);
@@ -68,6 +90,9 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
                 return record;
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException) throw (SecurityException) e;
+                if (e instanceof IllegalStateException) throw (IllegalStateException) e;
+                if (e instanceof IllegalArgumentException) throw (IllegalArgumentException) e;
                 throw new RuntimeException("Failed to invite employee", e);
             }
         } catch (SQLException e) {
@@ -86,7 +111,7 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                JdbcStaffContext.require(c, session, Capability.REVOKE_MEMBERSHIP);
 
                 // Check 1: Cannot revoke company primary administrator
                 try (PreparedStatement ps = c.prepareStatement("SELECT primary_admin_user_id FROM vrms_private.companies WHERE id = ?")) {
@@ -166,6 +191,7 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
                 return record;
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException) throw (SecurityException) e;
                 if (e instanceof IllegalStateException) throw (IllegalStateException) e;
                 if (e instanceof IllegalArgumentException) throw (IllegalArgumentException) e;
                 throw new RuntimeException("Failed to revoke membership", e);
@@ -189,7 +215,7 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                JdbcStaffContext.require(c, session, Capability.REVOKE_MEMBERSHIP);
 
                 // Verify new admin is an active administrator in the same company
                 try (PreparedStatement ps = c.prepareStatement(
@@ -222,6 +248,8 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException) throw (SecurityException) e;
+                if (e instanceof IllegalStateException) throw (IllegalStateException) e;
                 if (e instanceof IllegalArgumentException) throw (IllegalArgumentException) e;
                 throw new RuntimeException("Failed to handover administrator role", e);
             }
@@ -244,7 +272,7 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                JdbcStaffContext.require(c, session, Capability.MANAGE_PERSONNEL);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
                     try (ResultSet r = s.executeQuery()) {
@@ -264,6 +292,9 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof SecurityException) throw (SecurityException) e;
+                if (e instanceof IllegalStateException) throw (IllegalStateException) e;
+                if (e instanceof IllegalArgumentException) throw (IllegalArgumentException) e;
                 throw new RuntimeException("Failed to list members", e);
             }
         } catch (SQLException e) {
@@ -272,17 +303,57 @@ public final class JdbcStaffProvisioningService implements StaffProvisioningPort
         return Collections.unmodifiableList(list);
     }
 
-    private UUID inviteThroughProvider(String email, String fullName) {
-        throw new IllegalStateException("Employee invitation provider is not configured. No account or membership was created.");
-    }
+    static final class SupabaseAdminInviteProvider implements InviteProvider {
+        private final java.net.URI endpoint;
+        private final String serviceRoleKey;
+        private final in.smartvrms.server.integration.BoundedHttp http = new in.smartvrms.server.integration.BoundedHttp();
 
-    private static void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement(
-                "SELECT set_config('vrms.user_id', ?, true), set_config('vrms.company_id', ?, true), set_config('vrms.role', ?, true)")) {
-            s.setString(1, session.userId().toString());
-            s.setString(2, session.companyId().toString());
-            s.setString(3, session.role());
-            s.execute();
+        SupabaseAdminInviteProvider(java.net.URI endpoint, String serviceRoleKey) {
+            this.endpoint = Objects.requireNonNull(endpoint, "endpoint");
+            this.serviceRoleKey = Objects.requireNonNull(serviceRoleKey, "serviceRoleKey");
+        }
+
+        @Override
+        public UUID invite(String email, String fullName) {
+            if (email == null || !email.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+                throw new IllegalArgumentException("Invalid email format for employee invitation.");
+            }
+            com.google.gson.JsonObject payload = new com.google.gson.JsonObject();
+            payload.addProperty("email", email.strip());
+            if (fullName != null && !fullName.isBlank()) {
+                com.google.gson.JsonObject data = new com.google.gson.JsonObject();
+                data.addProperty("full_name", fullName.strip());
+                payload.add("data", data);
+            }
+            byte[] body = payload.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder(endpoint.resolve("/auth/v1/invite"))
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .header("apikey", serviceRoleKey)
+                    .header("Authorization", "Bearer " + serviceRoleKey)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(body))
+                    .build();
+
+            var response = http.send(request);
+            if (response.status() == 422 || response.status() == 400) {
+                String responseBody = new String(response.body(), java.nio.charset.StandardCharsets.UTF_8);
+                if (responseBody.contains("email_exists") || responseBody.contains("already exists")) {
+                    throw new IllegalArgumentException("A user with this email address already exists.");
+                }
+                throw new IllegalArgumentException("Invalid invitation request: " + response.status());
+            }
+            if (response.status() == 429) {
+                throw new IllegalStateException("Supabase rate limited invitation request.");
+            }
+            if (response.status() != 200) {
+                throw new IllegalStateException("Employee invitation provider returned status " + response.status());
+            }
+            com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(
+                    new String(response.body(), java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            String idStr = json.get("id").getAsString();
+            return UUID.fromString(idStr);
         }
     }
 }

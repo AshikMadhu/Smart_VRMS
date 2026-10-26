@@ -27,10 +27,25 @@ public final class JdbcPersonnelService implements PersonnelPort {
         if (!session.isAdministrator()) {
             throw new SecurityException("Forbidden: Only administrators can register employees");
         }
-        if (fullName == null || fullName.isBlank()) throw new IllegalArgumentException("Full name is required");
-        if (contact == null || contact.isBlank() || contact.length() < 7) throw new IllegalArgumentException("Valid contact number is required");
-        if (address == null || address.isBlank()) throw new IllegalArgumentException("Address is required");
-        if (joiningDate == null) throw new IllegalArgumentException("Joining date is required");
+        if (fullName == null || fullName.isBlank() || fullName.strip().length() > 120) {
+            throw new IllegalArgumentException("Full name is required (max 120 characters)");
+        }
+        if (contact == null || contact.isBlank() || contact.strip().length() < 7 || contact.strip().length() > 20) {
+            throw new IllegalArgumentException("Valid contact number is required (7 to 20 digits)");
+        }
+        String cleanEmail = null;
+        if (email != null && !email.isBlank()) {
+            cleanEmail = email.strip();
+            if (!cleanEmail.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+                throw new IllegalArgumentException("Invalid email format");
+            }
+        }
+        if (address == null || address.isBlank() || address.strip().length() > 255) {
+            throw new IllegalArgumentException("Address is required (max 255 characters)");
+        }
+        if (joiningDate == null) {
+            throw new IllegalArgumentException("Joining date is required");
+        }
 
         String sql = """
             INSERT INTO vrms_private.employees
@@ -48,7 +63,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
                     s.setObject(1, session.companyId());
                     s.setString(2, fullName.strip());
                     s.setString(3, contact.strip());
-                    s.setString(4, email != null && !email.isBlank() ? email.strip() : null);
+                    s.setString(4, cleanEmail);
                     s.setString(5, address.strip());
                     s.setDate(6, java.sql.Date.valueOf(joiningDate));
                     s.setBoolean(7, isDriver);
@@ -61,7 +76,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
                             null,
                             fullName.strip(),
                             contact.strip(),
-                            email != null ? email.strip() : null,
+                            cleanEmail,
                             address.strip(),
                             joiningDate,
                             "ACTIVE",
@@ -92,6 +107,25 @@ public final class JdbcPersonnelService implements PersonnelPort {
         if (!session.isAdministrator()) {
             throw new SecurityException("Forbidden: Only administrators can update employee records");
         }
+        if (fullName == null || fullName.isBlank() || fullName.strip().length() > 120) {
+            throw new IllegalArgumentException("Full name is required (max 120 characters)");
+        }
+        if (contact == null || contact.isBlank() || contact.strip().length() < 7 || contact.strip().length() > 20) {
+            throw new IllegalArgumentException("Valid contact number is required (7 to 20 digits)");
+        }
+        String cleanEmail = null;
+        if (email != null && !email.isBlank()) {
+            cleanEmail = email.strip();
+            if (!cleanEmail.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+                throw new IllegalArgumentException("Invalid email format");
+            }
+        }
+        if (address == null || address.isBlank() || address.strip().length() > 255) {
+            throw new IllegalArgumentException("Address is required (max 255 characters)");
+        }
+        if (employmentStatus == null || !List.of("ACTIVE", "ON_LEAVE", "DEACTIVATED").contains(employmentStatus)) {
+            throw new IllegalArgumentException("Invalid employment status. Must be one of ACTIVE, ON_LEAVE, DEACTIVATED");
+        }
 
         String sql = """
             UPDATE vrms_private.employees
@@ -107,7 +141,7 @@ public final class JdbcPersonnelService implements PersonnelPort {
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setString(1, fullName.strip());
                     s.setString(2, contact.strip());
-                    s.setString(3, email != null ? email.strip() : null);
+                    s.setString(3, cleanEmail);
                     s.setString(4, address.strip());
                     s.setString(5, employmentStatus);
                     s.setObject(6, employeeId);
@@ -150,6 +184,9 @@ public final class JdbcPersonnelService implements PersonnelPort {
         Objects.requireNonNull(employeeId, "employeeId");
         if (!session.isAdministrator()) {
             throw new SecurityException("Forbidden: Only administrators can deactivate employees");
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("Mandatory reason for deactivation is required");
         }
 
         String sql = """
@@ -251,10 +288,16 @@ public final class JdbcPersonnelService implements PersonnelPort {
     @Override
     public Optional<EmployeeRecord> findDuplicateEmployee(StaffSession session, String contactNumber, String email) {
         Objects.requireNonNull(session, "session");
+        String cleanContact = (contactNumber != null && !contactNumber.isBlank()) ? contactNumber.strip() : null;
+        String cleanEmail = (email != null && !email.isBlank()) ? email.strip() : null;
+        if (cleanContact == null && cleanEmail == null) {
+            return Optional.empty();
+        }
+
         String sql = """
             SELECT id, company_id, auth_user_id, full_name, contact_number, email, address, joining_date, employment_status, is_driver, photo_file_id, version
             FROM vrms_private.employees
-            WHERE company_id = ? AND (contact_number = ? OR (email IS NOT NULL AND email = ?))
+            WHERE company_id = ? AND ((? IS NOT NULL AND contact_number = ?) OR (? IS NOT NULL AND email IS NOT NULL AND email = ?))
             LIMIT 1
             """;
 
@@ -264,8 +307,10 @@ public final class JdbcPersonnelService implements PersonnelPort {
                 in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_PERSONNEL);
                 try (PreparedStatement s = c.prepareStatement(sql)) {
                     s.setObject(1, session.companyId());
-                    s.setString(2, contactNumber != null ? contactNumber.strip() : "");
-                    s.setString(3, email != null ? email.strip() : "");
+                    s.setString(2, cleanContact);
+                    s.setString(3, cleanContact);
+                    s.setString(4, cleanEmail);
+                    s.setString(5, cleanEmail);
                     try (ResultSet r = s.executeQuery()) {
                         if (r.next()) {
                             EmployeeRecord record = new EmployeeRecord(
@@ -306,6 +351,9 @@ public final class JdbcPersonnelService implements PersonnelPort {
         Objects.requireNonNull(employeeId, "employeeId");
         Objects.requireNonNull(date, "date");
         Objects.requireNonNull(status, "status");
+        if (!List.of("PRESENT", "ABSENT", "PARTIAL_DAY", "ON_LEAVE").contains(status)) {
+            throw new IllegalArgumentException("Invalid attendance status. Must be one of PRESENT, ABSENT, PARTIAL_DAY, ON_LEAVE");
+        }
 
         String sql = """
             INSERT INTO vrms_private.attendance_records
@@ -401,6 +449,15 @@ public final class JdbcPersonnelService implements PersonnelPort {
         Objects.requireNonNull(employeeId, "employeeId");
         if (!session.isAdministrator()) {
             throw new SecurityException("Forbidden: Only administrators can view or modify compensation records");
+        }
+        if (arrangementType == null || !List.of("FIXED_MONTHLY", "DAILY_WAGE", "PER_TRIP", "MIXED").contains(arrangementType)) {
+            throw new IllegalArgumentException("Invalid arrangement type. Must be one of FIXED_MONTHLY, DAILY_WAGE, PER_TRIP, MIXED");
+        }
+        if (baseRatePaise < 0 || tripAllowancePaise < 0) {
+            throw new IllegalArgumentException("Compensation amounts cannot be negative");
+        }
+        if (effectiveFrom == null) {
+            throw new IllegalArgumentException("Effective from date is required");
         }
 
         String sql = """

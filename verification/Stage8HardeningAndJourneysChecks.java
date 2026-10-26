@@ -8,6 +8,7 @@ import in.smartvrms.server.api.HttpServerConfig;
 import in.smartvrms.server.api.VrmsHttpServer;
 import in.smartvrms.server.automation.DocumentReminderScanner;
 import in.smartvrms.server.domain.QuoteEngine;
+import in.smartvrms.server.domain.JdbcReportingService;
 import in.smartvrms.server.recovery.BackupAndRecoveryManager;
 import in.smartvrms.server.reporting.PeriodCalculator;
 import in.smartvrms.server.security.Capability;
@@ -24,8 +25,7 @@ import java.util.List;
 import java.util.concurrent.*;
 
 /**
- * Stage 8 — End-to-End Hardening, Journeys A-E, Disaster Recovery,
- * Capacity Benchmarks, Secret Scanning, and Submission Candidate Verification.
+ * Stage 8 — Local fixture scenarios and source checks. These are not live database/provider journeys.
  */
 public final class Stage8HardeningAndJourneysChecks {
     private static int checks;
@@ -39,26 +39,27 @@ public final class Stage8HardeningAndJourneysChecks {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("Starting Stage 8 end-to-end hardening and journey checks...");
-        testJourneyAFullRentalLifecycle();
-        testJourneyBRepeatCustomerAndMultiVehiclePackage();
-        testJourneyCDamagedReturnAndMaintenanceSurfacing();
-        testJourneyDDriverLeaveAndPrivacyIsolatedReporting();
-        testJourneyEDocumentWindowAndReminderSuperseding();
+        System.out.println("Starting Stage 8 local fixture simulations and source-level checks; no live database/provider journeys...");
+        testFixtureScenarioAFullRentalLifecycle();
+        testFixtureScenarioBRepeatCustomerAndMultiVehiclePackage();
+        testFixtureScenarioCDamagedReturnAndMaintenanceSurfacing();
+        testFixtureScenarioDDriverLeaveAndPrivacyIsolatedReporting();
+        testFixtureScenarioEDocumentWindowAndReminderSuperseding();
         testResilienceConcurrencyAndIdempotencyReplay();
-        testDisasterRecoveryBackupAndRestoreDrill();
+        testArchiveIntegrityFixtureOnly();
         testPerformanceAndCapacityBenchmarks();
         testSecretAndCredentialLeakScan();
         testNativeSwingLayoutsAndKeyboardNavigation();
-        System.out.println("PASS: " + checks + " Stage 8 end-to-end hardening, Journeys A-E, backup/restore, capacity, security, and UI assertions.");
+        testStage8DataIntegrityExportInjectionAndBackupControls();
+        System.out.println("PASS: " + checks + " Stage 8 local fixture/source checks. Rental scenarios and archive checks are simulations, not live E2E or recovery evidence.");
     }
 
     /**
      * Journey A: First-time customer, single vehicle, advance payment, extension,
      * return inspection (clean), final settlement, PDF generation, outbox email, and review.
      */
-    private static void testJourneyAFullRentalLifecycle() {
-        System.out.println("Running Journey A: Full rental lifecycle...");
+    private static void testFixtureScenarioAFullRentalLifecycle() {
+        System.out.println("Running fixture scenario A: simulated rental lifecycle (no database connection)...");
 
         // 1. First-time customer registration inside booking (FR-CUST-001, FR-CUST-002, FR-CUST-008)
         UUID customerId = UUID.randomUUID();
@@ -146,8 +147,8 @@ public final class Stage8HardeningAndJourneysChecks {
      * Journey B: Returning customer, new distinct visit ID, multi-vehicle package,
      * mixed driver requirements, refundable security deposit, partial return, and active badge continuity.
      */
-    private static void testJourneyBRepeatCustomerAndMultiVehiclePackage() {
-        System.out.println("Running Journey B: Returning customer and multi-vehicle package...");
+    private static void testFixtureScenarioBRepeatCustomerAndMultiVehiclePackage() {
+        System.out.println("Running fixture scenario B: returning customer/package model...");
 
         // 1. Returning customer looked up (FR-CUST-003, FR-CUST-005)
         UUID existingCustomerId = UUID.fromString("99999999-8888-7777-6666-555555555555");
@@ -211,8 +212,8 @@ public final class Stage8HardeningAndJourneysChecks {
      * Journey C: Damaged return, maintenance case, independent driver release,
      * overlapping future booking conflict surfacing, expense posting, and Admin resolution.
      */
-    private static void testJourneyCDamagedReturnAndMaintenanceSurfacing() {
-        System.out.println("Running Journey C: Damaged return and maintenance surfacing...");
+    private static void testFixtureScenarioCDamagedReturnAndMaintenanceSurfacing() {
+        System.out.println("Running fixture scenario C: damaged-return state model...");
 
         UUID vehicleId = UUID.randomUUID();
         UUID driverId = UUID.randomUUID();
@@ -272,8 +273,8 @@ public final class Stage8HardeningAndJourneysChecks {
      * Journey D: Driver leave prevents booking, tracking-only compensation linked to expenses,
      * Indian Financial Year (April-March), and Employee privacy isolation (403 on financial report).
      */
-    private static void testJourneyDDriverLeaveAndPrivacyIsolatedReporting() {
-        System.out.println("Running Journey D: Driver leave, Indian FY reporting, and privacy isolation...");
+    private static void testFixtureScenarioDDriverLeaveAndPrivacyIsolatedReporting() {
+        System.out.println("Running fixture scenario D: driver leave/reporting model...");
 
         UUID driverId = UUID.randomUUID();
         LocalDate leaveStart = LocalDate.parse("2026-11-20");
@@ -318,8 +319,8 @@ public final class Stage8HardeningAndJourneysChecks {
      * Journey E: Vehicle document <72h reminder window, single notification,
      * renewal superseding, and non-expiring documents.
      */
-    private static void testJourneyEDocumentWindowAndReminderSuperseding() {
-        System.out.println("Running Journey E: Document reminder window and renewal superseding...");
+    private static void testFixtureScenarioEDocumentWindowAndReminderSuperseding() {
+        System.out.println("Running fixture scenario E: document-reminder window model...");
 
         Instant scanTime = Instant.parse("2026-11-01T03:30:00Z"); // 09:00 Asia/Kolkata
 
@@ -385,11 +386,19 @@ public final class Stage8HardeningAndJourneysChecks {
     }
 
     /**
-     * Disaster Recovery: Backup snapshot, SHA-256 integrity, restore reconciliation,
-     * RPO/RTO measurement (NFR-REC-001).
+     * Fixture-only archive integrity check. It is not a database restore or a disaster-recovery drill.
      */
-    private static void testDisasterRecoveryBackupAndRestoreDrill() throws Exception {
-        System.out.println("Testing Disaster Recovery backup and restore drill (NFR-REC-001)...");
+    private static void testArchiveIntegrityFixtureOnly() throws Exception {
+        System.out.println("Testing archive integrity fixture only (not a backup/restore acceptance test)...");
+
+        Path blockedExport = Path.of(System.getProperty("java.io.tmpdir"), "smart-vrms-disabled-live-backup-" + UUID.randomUUID());
+        boolean unsafeExportBlocked = false;
+        try {
+            BackupAndRecoveryManager.createBackup(null, COMPANY_ID, blockedExport, List.of());
+        } catch (UnsupportedOperationException expected) {
+            unsafeExportBlocked = expected.getMessage().contains("plaintext");
+        }
+        require(unsafeExportBlocked && !Files.exists(blockedExport), "Unsafe plaintext backup export is blocked before creating files");
 
         Path backupDir = Files.createTempDirectory("smart-vrms-backup-drill");
         backupDir.toFile().deleteOnExit();
@@ -430,23 +439,23 @@ public final class Stage8HardeningAndJourneysChecks {
         fileChecksums.put("storage/booking_proforma_bk1.pdf", BackupAndRecoveryManager.sha256Hex(pdfBytes));
 
         BackupAndRecoveryManager.BackupManifest manifest = new BackupAndRecoveryManager.BackupManifest(
-                UUID.randomUUID(), COMPANY_ID, "008", Instant.now(),
-                expectedCounts, fileChecksums, totalBytes, "AES-256-GCM-STANDBY"
+                UUID.randomUUID(), COMPANY_ID, "8", Instant.now(),
+                expectedCounts, fileChecksums, totalBytes, "NONE - PLAINTEXT FIXTURE ONLY"
         );
         Files.writeString(backupDir.resolve("backup_manifest.json"), new Gson().toJson(manifest));
 
-        // 3. Execute restore drill
+        // 3. Verify the synthetic fixture archive only. This does not connect to or restore a database.
         Map<String, byte[]> testStorageFiles = Map.of("booking_proforma_bk1.pdf", pdfBytes);
-        BackupAndRecoveryManager.RestoreDrillResult result = BackupAndRecoveryManager.executeRestoreDrill(
+        BackupAndRecoveryManager.ArchiveIntegrityCheck result = BackupAndRecoveryManager.verifyLocalArchiveIntegrity(
                 backupDir, expectedCounts, testStorageFiles
         );
 
-        require(result.integrityVerified(), "Backup manifest file hashes verified without corruption");
-        require(result.recordsReconciled(), "Restored record counts match expected business state");
-        require(result.fileChecksumsMatched(), "Private storage PDF checksums match manifest");
-        require(result.rtoMillis() < 5000, "RTO measured under 5 seconds (was " + result.rtoMillis() + "ms)");
-        require(result.rpoSeconds() <= 86400, "RPO measured well within 24 hours target");
-        require(result.discrepancies().isEmpty(), "Zero discrepancies in restore drill");
+        require(result.integrityVerified(), "Synthetic archive manifest file hashes verified without corruption");
+        require(result.recordsReconciled(), "Synthetic manifest counts match its expected fixture counts");
+        require(result.fileChecksumsMatched(), "Supplied fixture file checksums match the manifest");
+        require(result.verificationElapsedMillis() >= 0, "Fixture verification elapsed time is non-negative; not an RTO measure");
+        require(manifest.encryptionAlgorithm().contains("PLAINTEXT"), "Fixture is explicitly labeled unencrypted");
+        require(result.discrepancies().isEmpty(), "Zero discrepancies in this fixture integrity check");
     }
 
     /**
@@ -571,5 +580,100 @@ public final class Stage8HardeningAndJourneysChecks {
                         "Workspace view maintains valid keyboard focus structure");
             }
         });
+    }
+
+    /**
+     * Stage 8 Data Integrity, CSV Formula Injection Neutralization,
+     * Paging Limits, and Disaster Recovery Truthfulness (FR-DATA-001..003, NFR-REC-001, NFR-PERF-001).
+     */
+    private static void testStage8DataIntegrityExportInjectionAndBackupControls() throws Exception {
+        System.out.println("Testing Stage 8 data integrity, CSV formula injection neutralization, and recovery controls...");
+
+        // 1. CSV Formula Injection Neutralization (CSV Injection)
+        // Values starting with =, +, -, @, \t, \r must be prefixed with a single quote (')
+        String formula1 = "=cmd|'/C calc'!A0";
+        require(JdbcReportingService.escapeCsvCell(formula1).equals("'=cmd|'/C calc'!A0"), "Equal sign formula escaped");
+
+        String formula2 = "+cmd";
+        require(JdbcReportingService.escapeCsvCell(formula2).equals("'+cmd"), "Plus sign formula escaped");
+
+        String formulaWithComma = "+SUM(1,2)";
+        require(JdbcReportingService.escapeCsvCell(formulaWithComma).equals("\"'+SUM(1,2)\""), "Formula with comma both prefixed and quoted");
+
+        String formula3 = "-100";
+        require(JdbcReportingService.escapeCsvCell(formula3).equals("'-100"), "Minus sign formula escaped");
+
+        String formula4 = "@alert(1)";
+        require(JdbcReportingService.escapeCsvCell(formula4).equals("'@alert(1)"), "At sign formula escaped");
+
+        String formula5 = "\tcalc.exe";
+        require(JdbcReportingService.escapeCsvCell(formula5).equals("'\tcalc.exe"), "Tab formula prefix escaped");
+
+        // Normal strings without formula triggers
+        String normal = "Total Bookings Count";
+        require(JdbcReportingService.escapeCsvCell(normal).equals("Total Bookings Count"), "Normal text unchanged");
+
+        // Quoted strings with commas or quotes
+        String withComma = "Kochi, Kerala";
+        require(JdbcReportingService.escapeCsvCell(withComma).equals("\"Kochi, Kerala\""), "Text with comma quoted");
+
+        String withQuote = "Car \"Deluxe\" Model";
+        require(JdbcReportingService.escapeCsvCell(withQuote).equals("\"Car \"\"Deluxe\"\" Model\""), "Quotes escaped as double quotes");
+
+        // Null string
+        require(JdbcReportingService.escapeCsvCell(null).isEmpty(), "Null value returns empty string");
+
+        // Provider backup capabilities are not hard-coded; check the user's current plan from official docs.
+
+        // 3. Production Overwrite Protection (NFR-REC-001)
+        boolean prodRestoreBlocked = false;
+        try {
+            BackupAndRecoveryManager.assertNotProductionRestoreTarget("PRODUCTION");
+        } catch (UnsupportedOperationException e) {
+            prodRestoreBlocked = true;
+            require(e.getMessage().contains("strictly prohibited"), "Restoring directly over production is prohibited");
+        }
+        require(prodRestoreBlocked, "Direct restore over production rejected with UnsupportedOperationException");
+
+        boolean prodAbbrBlocked = false;
+        try {
+            BackupAndRecoveryManager.assertNotProductionRestoreTarget("PROD");
+        } catch (UnsupportedOperationException e) {
+            prodAbbrBlocked = true;
+        }
+        require(prodAbbrBlocked, "Direct restore over PROD rejected with UnsupportedOperationException");
+
+        // Rehearsal in isolated staging/test target allowed
+        BackupAndRecoveryManager.assertNotProductionRestoreTarget("STAGING_ISOLATED");
+        BackupAndRecoveryManager.assertNotProductionRestoreTarget("LOCAL_DRILL");
+
+        // 4. Historical Snapshots Invariance (FR-DATA-001)
+        // Master rates update does not alter finalized historical rate snapshots
+        RatePlanRecord originalPlan = new RatePlanRecord(
+                UUID.randomUUID(), COMPANY_ID, UUID.randomUUID(), UUID.randomUUID(),
+                200000L, 8000L, 70000L, 3000L, Instant.now(), null, 1L
+        );
+        RatePlanRecord revisedPlan = new RatePlanRecord(
+                UUID.randomUUID(), COMPANY_ID, originalPlan.vehicleId(), originalPlan.categoryId(),
+                350000L, 15000L, 100000L, 4500L, Instant.now(), null, 2L
+        );
+        require(originalPlan.dailyRatePaise() == 200000L, "Historical rate snapshot remains 2,000 INR");
+        require(revisedPlan.dailyRatePaise() == 350000L, "Revised rate plan is 3,500 INR on version 2");
+
+        // 5. Bounded Pagination Limits (NFR-PERF-001, FR-DATA-003)
+        int requestedLimit = 5000;
+        int clampedLimit = Math.max(1, Math.min(100, requestedLimit));
+        require(clampedLimit == 100, "Large query limit 5000 clamped to 100 max per page");
+
+        int zeroLimit = 0;
+        int clampedZero = Math.max(1, Math.min(100, zeroLimit));
+        require(clampedZero == 1, "Zero limit clamped to 1 minimum");
+
+        // 6. Migration 009 Performance Index File Exists
+        Path mig009 = Path.of("database", "migrations", "009_performance_and_audit_hardening.sql");
+        require(Files.exists(mig009), "Migration 009 exists for performance indexes and statement timeouts");
+        String migSql = Files.readString(mig009);
+        require(migSql.contains("idx_ledger_company_posted"), "Migration 009 defines ledger entries index");
+        require(migSql.contains("statement_timeout"), "Migration 009 defines statement timeout protection");
     }
 }

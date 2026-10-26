@@ -4,11 +4,13 @@ Current public preview is `0.1.2-preview`: hosted staff sign-in and real fleet r
 
 # Smart VRMS — Submission Readiness & Integration Review (Stage 8)
 
-**Deliverable Status**: Submission Candidate / Working Prototype (Pre-Release)  
-**Date**: 25 October 2026, Asia/Kolkata  
-**Target Platform**: Windows 11 x64, OpenJDK 17.0.12, Apache Maven 3.9.8  
-**Architecture**: Four-module Core Java 17 + Swing MVC + Supabase PostgreSQL Backend  
-**Gate Status**: **Gate G5 (End-to-End Hardening & Recovery) PASSED**  
+> **Historical record only.** Completion, restore, RTO/RPO, and end-to-end language in this archived Stage 8 report is superseded. The checks described here used local fixtures and did not connect to the live business database or perform a real restore. Use the current traceability matrix and release audit for present status.
+
+**Deliverable Status**: Submission Candidate / Working Prototype (Pre-Release)
+**Date**: 25 October 2026, Asia/Kolkata
+**Target Platform**: Windows 11 x64, OpenJDK 17.0.12, Apache Maven 3.9.8
+**Architecture**: Four-module Core Java 17 + Swing MVC + Supabase PostgreSQL Backend
+**Gate Status**: Historical claim superseded; live end-to-end/recovery gate remains open.
 **Evidence**: `docs/evidence/stage8-runtime/local-verification.txt` (1,070 assertions across 14 test suites passed)
 
 ---
@@ -16,9 +18,9 @@ Current public preview is `0.1.2-preview`: hosted staff sign-in and real fleet r
 ## 1. Executive Summary & Honest Release Labeling
 
 In accordance with foundational rules and development contracts:
-- **Scope Status**: All core business modules across Stages 1 through 8 are implemented, hardened, and verified with zero regressions.
+- **Scope Status**: Historical statement, not current evidence; full business workflows are not live-accepted.
 - **Release Label**: This artifact is strictly labelled as a **Submission Candidate / Prototype**. It is **not** a final public release because Stage 9 (Multi-Platform Native `jpackage` packaging for macOS/Linux, headless 24/7 worker hosting) and Stage 10 (Public download publication, SHA256 release distribution) require explicit deployment authorization and external build runners.
-- **Traceability**: All 90 requirement IDs from `planning/Requirements-and-Verification.csv` are preserved in `docs/Delivery-Checklist.csv`: **84 Complete**, **6 Planned** (awaiting Stage 9/10 hosted distribution infrastructure).
+- **Traceability**: This archived snapshot's **84 Complete / 6 Planned** count is obsolete. The current tracker preserves 90 IDs and records remaining delivery work as in progress pending real acceptance.
 
 ---
 
@@ -126,15 +128,9 @@ All demonstration scenarios execute on strictly fictional development data witho
 
 ---
 
-## 4. Disaster Recovery & Backup/Restore Drill (`NFR-REC-001`)
+## 4. Historical fixture archive check — not a recovery drill (`NFR-REC-001`)
 
-- **Backup Manager**: Implemented in `in.smartvrms.server.recovery.BackupAndRecoveryManager`.
-- **Drill Results**:
-  - Logical snapshot generated for all 27 business tables with SHA-256 integrity checksums.
-  - Private storage objects (billing PDFs, inspection photos) validated against cryptographic hashes.
-  - Non-destructive restore drill reconciled record counts and checksums with **zero discrepancies**.
-  - **Measured RTO**: 4 milliseconds (target < 5,000 ms).
-  - **Measured RPO**: 0 seconds (target <= 24 hours).
+The old test created synthetic table JSON and compared hashes/counts in a temporary directory. It did not call a live database, copy Storage objects into a backup, restore data, or measure RTO/RPO. `BackupAndRecoveryManager.createBackup(...)` is now disabled for live data because the legacy export was plaintext and incomplete. NFR-REC-001 remains not implemented.
 
 ---
 

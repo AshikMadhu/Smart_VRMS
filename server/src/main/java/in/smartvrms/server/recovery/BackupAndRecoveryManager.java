@@ -13,10 +13,8 @@ import java.time.Instant;
 import java.util.*;
 
 /**
- * Backup and Recovery Manager (NFR-REC-001).
- *
- * Implements non-destructive, isolated logical database exports and private-file
- * metadata verification, SHA-256 hash reconciliation, and isolated restore checks.
+ * Experimental plaintext export and archive-integrity helper only. This is NOT a production backup or restore
+ * implementation: backup creation is disabled, private storage objects are not copied, and no database restore occurs.
  */
 public final class BackupAndRecoveryManager {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -32,133 +30,30 @@ public final class BackupAndRecoveryManager {
             String encryptionAlgorithm
     ) {}
 
-    public record RestoreDrillResult(
+    public record ArchiveIntegrityCheck(
             UUID backupId,
             boolean integrityVerified,
             boolean recordsReconciled,
             boolean fileChecksumsMatched,
-            long rtoMillis,
-            long rpoSeconds,
+            long verificationElapsedMillis,
+            long archiveAgeSeconds,
             List<String> discrepancies
     ) {}
 
     /**
-     * Creates an isolated logical backup snapshot for a company into the specified export directory.
+     * Fails closed until a complete encrypted database-and-Storage backup/restore implementation is provided.
      */
     public static BackupManifest createBackup(Connection conn, UUID companyId, Path exportDir, List<Path> privateFilesToInclude) throws SQLException, IOException {
-        Objects.requireNonNull(conn, "conn");
-        Objects.requireNonNull(companyId, "companyId");
-        Objects.requireNonNull(exportDir, "exportDir");
-
-        Files.createDirectories(exportDir);
-        UUID backupId = UUID.randomUUID();
-        Instant createdAt = Instant.now();
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        Map<String, String> fileChecksums = new LinkedHashMap<>();
-        long totalBytes = 0;
-
-        // Core business tables in dependency order
-        List<String> tables = List.of(
-                "companies",
-                "employees",
-                "attendance_records",
-                "compensation_records",
-                "vehicle_categories",
-                "vehicles",
-                "vehicle_documents",
-                "asset_restrictions",
-                "driver_profiles",
-                "customers",
-                "customer_visits",
-                "rate_plans",
-                "bookings",
-                "booking_assignments",
-                "vehicle_reservations",
-                "driver_reservations",
-                "custody_records",
-                "maintenance_cases",
-                "payments",
-                "payment_allocations",
-                "refundable_deposits",
-                "billing_documents",
-                "ledger_entries",
-                "outbox_messages",
-                "delivery_attempts",
-                "service_reviews",
-                "service_review_corrections"
+        throw new UnsupportedOperationException(
+                "Production backup is unavailable: this legacy exporter is plaintext and does not copy private Storage objects. No backup was created."
         );
 
-        for (String table : tables) {
-            String sql = "SELECT * FROM vrms_private." + table + " WHERE company_id = ? ORDER BY 1";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setObject(1, companyId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    ResultSetMetaData md = rs.getMetaData();
-                    int colCount = md.getColumnCount();
-                    JsonArray rows = new JsonArray();
-
-                    while (rs.next()) {
-                        JsonObject obj = new JsonObject();
-                        for (int i = 1; i <= colCount; i++) {
-                            String colName = md.getColumnName(i);
-                            Object val = rs.getObject(i);
-                            if (val == null) {
-                                obj.add(colName, JsonNull.INSTANCE);
-                            } else {
-                                obj.addProperty(colName, val.toString());
-                            }
-                        }
-                        rows.add(obj);
-                    }
-
-                    int count = rows.size();
-                    counts.put(table, count);
-
-                    byte[] tableBytes = GSON.toJson(rows).getBytes(StandardCharsets.UTF_8);
-                    Path tableFile = exportDir.resolve(table + ".json");
-                    Files.write(tableFile, tableBytes);
-                    totalBytes += tableBytes.length;
-                    fileChecksums.put(table + ".json", sha256Hex(tableBytes));
-                }
-            } catch (SQLException e) {
-                // If table doesn't exist in specific fixture, record 0
-                counts.put(table, 0);
-            }
-        }
-
-        // Include private storage files if provided
-        if (privateFilesToInclude != null) {
-            for (Path p : privateFilesToInclude) {
-                if (Files.exists(p) && Files.isRegularFile(p)) {
-                    byte[] data = Files.readAllBytes(p);
-                    String fileName = p.getFileName().toString();
-                    fileChecksums.put("storage/" + fileName, sha256Hex(data));
-                    totalBytes += data.length;
-                }
-            }
-        }
-
-        BackupManifest manifest = new BackupManifest(
-                backupId,
-                companyId,
-                "008",
-                createdAt,
-                counts,
-                fileChecksums,
-                totalBytes,
-                "AES-256-GCM-STANDBY"
-        );
-
-        byte[] manifestBytes = GSON.toJson(manifest).getBytes(StandardCharsets.UTF_8);
-        Files.write(exportDir.resolve("backup_manifest.json"), manifestBytes);
-
-        return manifest;
     }
 
     /**
-     * Executes a non-destructive restoration drill and verifies integrity, hash agreement, RTO and RPO.
+     * Checks the integrity of a previously generated local export. This does not restore a database or measure RTO/RPO.
      */
-    public static RestoreDrillResult executeRestoreDrill(Path exportDir, Map<String, Integer> expectedCounts, Map<String, byte[]> testStorageFiles) throws IOException {
+    public static ArchiveIntegrityCheck verifyLocalArchiveIntegrity(Path exportDir, Map<String, Integer> expectedCounts, Map<String, byte[]> testStorageFiles) throws IOException {
         long startTime = System.currentTimeMillis();
         Path manifestPath = exportDir.resolve("backup_manifest.json");
         if (!Files.exists(manifestPath)) {
@@ -215,18 +110,31 @@ public final class BackupAndRecoveryManager {
             }
         }
 
-        long rtoMillis = System.currentTimeMillis() - startTime;
-        long rpoSeconds = Math.max(0, Instant.now().getEpochSecond() - manifest.createdAt().getEpochSecond());
+        long verificationElapsedMillis = System.currentTimeMillis() - startTime;
+        long archiveAgeSeconds = Math.max(0, Instant.now().getEpochSecond() - manifest.createdAt().getEpochSecond());
 
-        return new RestoreDrillResult(
+        return new ArchiveIntegrityCheck(
                 manifest.backupId(),
                 integrityVerified,
                 recordsReconciled,
                 filesMatched,
-                rtoMillis,
-                rpoSeconds,
+                verificationElapsedMillis,
+                archiveAgeSeconds,
                 discrepancies
         );
+    }
+
+    /**
+     * Production safety guard: Strictly prohibits restoring directly over the live production project.
+     * Disaster recovery must always be executed in an isolated non-production or staging rehearsal environment.
+     */
+    public static void assertNotProductionRestoreTarget(String targetEnvironment) {
+        if (targetEnvironment != null && (targetEnvironment.equalsIgnoreCase("PRODUCTION") || targetEnvironment.equalsIgnoreCase("PROD"))) {
+            throw new UnsupportedOperationException(
+                    "Restoring directly over the live production project is strictly prohibited (NFR-REC-001). " +
+                    "Disaster recovery rehearsals must be performed in an isolated non-production or staging environment."
+            );
+        }
     }
 
     public static String sha256Hex(byte[] data) {

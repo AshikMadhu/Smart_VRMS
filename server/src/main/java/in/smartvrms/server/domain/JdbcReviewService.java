@@ -6,6 +6,8 @@ import in.smartvrms.contracts.ServiceReviewCommand;
 import in.smartvrms.contracts.ServiceReviewCorrectionCommand;
 import in.smartvrms.contracts.ServiceReviewRecord;
 import in.smartvrms.contracts.StaffSession;
+import in.smartvrms.server.security.Capability;
+import in.smartvrms.server.security.JdbcStaffContext;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -29,18 +31,16 @@ public class JdbcReviewService implements ReviewPort {
         this.auditPort = auditPort;
     }
 
-    private void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("SELECT vrms_private.set_app_context(?, ?)")) {
-            ps.setObject(1, session.userId());
-            ps.setObject(2, session.companyId());
-            ps.execute();
-        }
-    }
-
     private void checkStaff(StaffSession session) {
         Objects.requireNonNull(session, "session");
         if (!"ADMINISTRATOR".equals(session.role()) && !"EMPLOYEE".equals(session.role())) {
             throw new SecurityException("Forbidden: Staff session required");
+        }
+    }
+
+    private void checkAdminOnly(StaffSession session, String actionDesc) {
+        if (!"ADMINISTRATOR".equals(session.role())) {
+            throw new SecurityException("Forbidden: Only administrators may " + actionDesc + ".");
         }
     }
 
@@ -52,7 +52,7 @@ public class JdbcReviewService implements ReviewPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                JdbcStaffContext.require(c, session, Capability.RECORD_REVIEW);
 
                 // 1. Check booking exists and resolve customer_id and visit_id
                 UUID customerId = null;
@@ -171,12 +171,13 @@ public class JdbcReviewService implements ReviewPort {
     @Override
     public ServiceReviewRecord correctReview(StaffSession session, ServiceReviewCorrectionCommand command) {
         checkStaff(session);
+        checkAdminOnly(session, "correct reviews");
         Objects.requireNonNull(command, "command");
 
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                JdbcStaffContext.require(c, session, Capability.CORRECT_SERVICE_REVIEW);
 
                 ServiceReviewRecord existing = null;
                 try (PreparedStatement ps = c.prepareStatement(
@@ -253,7 +254,9 @@ public class JdbcReviewService implements ReviewPort {
         checkStaff(session);
         List<ServiceReviewRecord> list = new ArrayList<>();
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            c.setReadOnly(true);
+            c.setAutoCommit(false);
+            JdbcStaffContext.require(c, session, Capability.VIEW_OPERATIONAL_HISTORY);
 
             StringBuilder sql = new StringBuilder(
                     "SELECT id, company_id, booking_id, customer_id, visit_id, rating, feedback_text, " +
@@ -283,6 +286,7 @@ public class JdbcReviewService implements ReviewPort {
                     }
                 }
             }
+            c.commit();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to list reviews: " + e.getMessage(), e);
         }
