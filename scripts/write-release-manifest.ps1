@@ -12,8 +12,8 @@ if ($version -notmatch '^\d+\.\d+\.\d+-preview$') { throw 'The manifest writer o
 $manifest = @"
 # Smart VRMS release manifest
 
-Version: **$version**. Classification: **authenticated fleet prototype preview**.
-Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED** by incomplete business workflows. Operator acceptance confirmed hosted staff sign-in and fleet reading; this does not establish completion of the remaining rental workflows.
+Version: **$version**. Classification: **authenticated rental-management beta preview**.
+Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED**. This is a beta preview; production readiness is not established. Operator acceptance confirmed hosted staff sign-in and fleet reading, and migration 009 indexes; authenticated live write journeys and full lifecycle acceptance remain pending.
 
 | Artifact | SHA-256 | Bytes |
 |---|---|---|
@@ -30,7 +30,7 @@ These hashes identify the build that generated this file. CI rebuilds publish th
 | macOS Intel / Apple Silicon | PENDING RUNNER — no native device acceptance |
 | Ubuntu 24.04 GNOME x64 | PENDING RUNNER — no native device acceptance |
 
-The desktop bundle contains the public API endpoint only. User credentials and session tokens are never packaged. Fleet data is live only after staff authentication; other business workflows remain incomplete. See [Release-Audit.md](Release-Audit.md).
+The desktop bundle contains the public API endpoint only. User credentials and session tokens are never packaged. The client contains the current rental workflow implementation, but live write journeys beyond staff authentication and fleet reads remain unaccepted. See [Release-Audit.md](Release-Audit.md).
 The stable latest-release URL will not resolve until a stable release exists. Preview downloads use their versioned release tags. Already downloaded executables are replaced by downloading a later build.
 "@
 [IO.File]::WriteAllText((Join-Path (Get-Location) 'docs/Release-Manifest.md'),$manifest,(New-Object Text.UTF8Encoding($false)))

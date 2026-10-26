@@ -1,53 +1,27 @@
-# Independent release audit
+# Smart VRMS release audit — 0.2.0-preview
 
-This records findings for the published 0.1.1-preview. Later connected-records repairs on main are recorded in Business-Prototype-Progress.md; do not treat the historical table below as a claim that those repaired source paths are still unchanged.
+Date: 27 October 2026 (Asia/Kolkata). Classification: **beta preview**. Production readiness is **not established**. This audit records evidence rather than treating code presence or local test success as proof that a complete rental business can safely operate the system.
 
-Date: 25 October 2026, Asia/Kolkata. Version under review: 0.1.1-preview.
+## Verified evidence
 
-**Production release status: BLOCKED. This package is an interface preview.** Earlier completion/readiness claims are superseded by this source-based review. A successful compile or fixture suite does not prove the deployed product works.
-
-## What was actually found
-
-| Area | Evidence and current behavior | Release implication |
+| Check | Result | Boundary |
 |---|---|---|
-| Server composition | ServerMain passes only Auth and StaffAuthorizer to VrmsHttpServer; all business ports are null | Business routes return unavailable; service classes existing on disk do not make them connected |
-| Booking | BookingView.confirmBtn remains disabled; only local draft validation/review runs | A customer cannot complete a persisted booking in the desktop |
-| Records and operations UI | Personnel, drivers, customers, running services, finance and reports contain hardcoded specimen data; actions previously updated labels/tables without HTTP | Reviewed workspace now labels examples and disables unconnected write/export buttons |
-| Provider invitation | JdbcStaffProvisioningService previously invented an Auth UUID without creating an Auth user | Corrected to fail explicitly pending a supported invitation provider; no fake membership is inserted |
-| Private files | JdbcFileStorageService previously invented a signing token instead of calling Supabase Storage | Corrected to report signing unavailable; no invalid URL is advertised as signed |
-| Database context | At audit time those adapters called absent vrms_private.set_app_context. Current local changes refactor finance/automation/reviews/reporting to JdbcStaffContext and explicit transactions. The user confirmed migration version 8, all six migration indexes, and current-source staff/Auth/restricted-role/TLS/in-transaction fleet read checks. | Repaired in local source; migration, index catalog and read-only staff path confirmed; authenticated business workflows still require live verification before release |
-| Permissions | Business policies often check only a transaction's company, and finance/compensation depend on role settings; not all operations recheck authoritative membership inside mutation transaction | Active/revoked staff, sensitive fields and concurrent changes need live tests and policy review |
-| Allocation | Reservation tables have overlap queries/indexes but no final database exclusion constraint | Multi-connection conflict, freeze/extension/checkout safety needs implementation/verification |
-| Financial correctness | Audit/idempotency calls use separate transactions; some writes/postings are not proven atomic | Money/retry/correction acceptance remains pending |
-| Worker | Outbox records/scanner exist; no independently running sender/scheduler has been deployed | Laptop-off delivery is not demonstrated |
-| Hosted service | User confirms only Supabase is configured | A fresh download has no live Java API to connect to |
-| Automated evidence | Stage tests include mock ports, arithmetic on local variables, document-string and file-existence assertions | Earlier journeys, restore/RPO/RTO and full completion claims do not establish live integration |
-| Distribution | Windows app-image can be built; macOS/Linux have no native execution evidence | Only Windows preview is publishable; unsigned status is disclosed |
+| Merged source | GitHub `main` contains the reviewed implementation | Source merge is not deployment acceptance for every route |
+| Local verification | Repository verification suite previously passed 1,654 assertions | Fixture/regression coverage does not prove hosted database behavior |
+| Supabase schema | Operator confirmed migration 009 and all six expected indexes | Catalog/schema check only |
+| Staff authentication | Operator reported current-source live check PASS | Auth and session validation only |
+| Fleet read | Operator reported packaged staff sign-in PASS and fleet rows loaded | Live read path only; no authenticated write accepted |
+| Public API liveness | Read-only `/health` request returned HTTP 200 | Health is not a business workflow |
+| Windows package | `jpackage` Windows x64 app image and ZIP built locally | Unsigned; needs release CI to reproduce and publish |
 
-## Corrections made during this review
+## Not accepted as a complete business workflow
 
-- Approved Gson now parses/serializes desktop authentication JSON; duplicate keys, invalid UTF-8, excessive depth and responses over 64 KiB fail. Response deadlines cover the complete body. Regex extraction is removed.
-- Fixed the real API's missing JSON Content-Type header, discovered when the strict desktop client exercised it.
-- Password input is cleared on rejected local validation. Preview navigation is disabled while sign-in is pending. Sign-out now clears its in-memory result and invokes provider logout off the EDT.
-- Supabase Session pooler username now includes the project suffix; added configurable CA path and JDBC deadlines. This fix has not been verified against a live operator credential.
-- Fixed quote rounding at 24h plus sub-minute/nanosecond boundaries, checked arithmetic overflow, and removed invented default rates for an absent rate plan.
-- Fixed the filtered running-service list's selection mapping.
-- Unconnected specimen screens are explicitly read-only. They do not record a payment, invite a user, export a PDF or change custody merely by displaying a success label.
-- Isolated the packaging/configuration test so it cannot replace the real user's public API endpoint. Saving a new endpoint validates its transport before writing.
-- Added semantic-version update checks restricted to the official repository's HTTPS release pages; no executable is downloaded or run automatically.
-- Packaging now includes the approved desktop JSON dependency and EC TLS provider, validates recursive-clean paths and excludes server/database artifacts from the client. Runtime/binaries/configuration are ignored by source control.
+The full authorized Admin/Employee journeys still need live acceptance on the hosted development project: create/edit records, booking conflict and concurrency behavior, checkout/return and inspection, extensions, payment allocation/reconciliation/refund/correction, document upload/access denial, reminder delivery, and company-boundary denial. Use approved fictional records for that work. The user has not supplied a result for those journeys, so this audit does not mark them PASS.
 
-## Verification boundary
+The prototype records payment manually; no automatic payment-gateway callback is enabled. Outbound email/reminder delivery, statutory payroll, backup/restore, and recovery objectives are not claimed as complete. Unsigned Windows distribution and absence of macOS/Linux artifacts are known limits.
 
-The original 1,534 assertions passed before corrections, despite the disconnected workflows above. A new independent suite checks pricing boundaries/overflow, JSON escaping/duplicate rejection/limits, update URI validation, configuration validation and disabled unconnected mutations. Full revised suite results and native/package evidence are recorded in the repository review report. No public live staff credential, end-to-end booking, payment, private upload, actual mail delivery, database restore or non-Windows device acceptance has been exercised by this review.
+## Release rule
 
-## Next work required for a business release
+Only publish this package as `0.2.0-preview`. Do not call it bug-free, production-ready, or a complete business system. Do not use it as the sole source of financial/accounting records until the live workflows and recovery controls have been accepted. A later stable release requires live workflow and authorization tests, backup/restore evidence, mail-worker operations if reminders are promised, and signed platform packages for every advertised OS.
 
-1. Complete and test shared membership-aware transaction boundaries, RLS policies, cross-resource constraints and atomic idempotency/audit/posting behavior.
-2. Replace mock UI data/actions with real API adapters/controllers, and wire only tested business services in ServerMain.
-3. Complete supported invitation/private-storage integrations and independent email worker setup.
-4. Run the original live Admin/Employee journeys and negative/concurrency/recovery tests using fictional data. Update each of the 90 requirement rows only against its original acceptance criterion.
-5. Deploy a verified HTTPS API with protected server configuration; configure the desktop's public endpoint. An unauthenticated download does not grant staff membership or access to the company.
-6. Build/sign/test the intended platform packages and publish a stable release only after their gates pass.
-
-Publication of a clearly labelled preview and source code is authorized by the user's latest request. This does not change the production blockers. No claim of bug-free operation is made.
+See [Business Prototype Progress](Business-Prototype-Progress.md), [Operator Guide](Operator-and-Deployment-Guide.md), and the [requirements tracker](../planning/Requirements-and-Verification.csv).

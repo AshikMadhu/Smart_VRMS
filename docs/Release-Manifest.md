@@ -1,13 +1,13 @@
 # Smart VRMS release manifest
 
-Version: **0.1.2-preview**. Classification: **authenticated fleet prototype preview**.
-Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED** by incomplete business workflows. Operator acceptance confirmed hosted staff sign-in and fleet reading; this does not establish completion of the remaining rental workflows.
+Version: **0.2.0-preview**. Classification: **authenticated rental-management beta preview**.
+Status: **PREVIEW PUBLICATION AUTHORIZED; PRODUCTION BLOCKED**. This is a beta preview; production readiness is not established. Operator acceptance confirmed hosted staff sign-in and fleet reading, and migration 009 indexes; authenticated live write journeys and full lifecycle acceptance remain pending.
 
 | Artifact | SHA-256 | Bytes |
 |---|---|---|
-| SmartVRMS-Windows-x64.zip | 7C93EAAE9067130DADD81BB3EA12F7F7B5D95A95BE1FCB65A4CD82F1369C93E3 | 31999142 |
-| SmartVRMS.exe | 894192A69CECD4058C36E3A6EB860095276E917EF1068376A1725C0BA76DD4DE | Native Windows launcher |
-| server.jar | 86A175419EFEF978750B4C5558E66E5D00454E9F9CD671FF2149147868837345 | Server build input; excluded from the desktop package |
+| SmartVRMS-Windows-x64.zip | 6278014B9BFCC38BEE5E1D4C2D8626AEBCA9C748EB4353C092D83BD2D091A59D | 32150137 |
+| SmartVRMS.exe | 02088A27388F77F5D69D3D2E79D10E1985872471F173D8CE495FE8C844F40BEF | Native Windows launcher |
+| server.jar | B51A3E35C58941618C2A329C5FA4DB93182B9F4C4E50D7A15106CF30C753DA44 | Server build input; excluded from the desktop package |
 
 Only the client ZIP and SHA256SUMS.txt are intended as public preview assets. The server JAR is listed to identify local verification inputs; it is not bundled in the client.
 These hashes identify the build that generated this file. CI rebuilds publish their own SHA256SUMS.txt and Release-Manifest.md assets; use those release assets to verify the downloaded ZIP, not a different local build's hash.
@@ -18,5 +18,5 @@ These hashes identify the build that generated this file. CI rebuilds publish th
 | macOS Intel / Apple Silicon | PENDING RUNNER — no native device acceptance |
 | Ubuntu 24.04 GNOME x64 | PENDING RUNNER — no native device acceptance |
 
-The desktop bundle contains the public API endpoint only. User credentials and session tokens are never packaged. Fleet data is live only after staff authentication; other business workflows remain incomplete. See [Release-Audit.md](Release-Audit.md).
+The desktop bundle contains the public API endpoint only. User credentials and session tokens are never packaged. The client contains the current rental workflow implementation, but live write journeys beyond staff authentication and fleet reads remain unaccepted. See [Release-Audit.md](Release-Audit.md).
 The stable latest-release URL will not resolve until a stable release exists. Preview downloads use their versioned release tags. Already downloaded executables are replaced by downloading a later build.

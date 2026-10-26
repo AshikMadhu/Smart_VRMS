@@ -1,4 +1,4 @@
-param([string]$Version = '0.1.2-preview')
+param([string]$Version = '0.2.0-preview')
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 $workspaceRoot = [IO.Path]::GetFullPath((Get-Location).Path)
@@ -28,27 +28,34 @@ $runtimeDir = [IO.Path]::GetFullPath((Join-Path $workspaceRoot 'dist/runtime-win
 $outputDir = Reset-BuildFolder 'dist/package-win64'
 $checkedRuntime = Reset-BuildFolder 'dist/runtime-win64'
 Remove-Item -LiteralPath $checkedRuntime
+$jpackageTemp = Join-Path ([IO.Path]::GetTempPath()) ("smart-vrms-jpackage-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $jpackageTemp | Out-Null
 & (Join-Path $jdkPath 'bin/jlink.exe') --no-header-files --no-man-pages --strip-debug --compress=2 --add-modules java.base,java.desktop,java.logging,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.charsets --output $runtimeDir
 if ($LASTEXITCODE -ne 0) { throw 'jlink failed.' }
-& (Join-Path $jdkPath 'bin/jpackage.exe') --type app-image --input $inputDir --dest $outputDir --name SmartVRMS --main-jar desktop-0.1.0-SNAPSHOT.jar --main-class in.smartvrms.desktop.DesktopMain --runtime-image $runtimeDir --app-version ($Version -split '-')[0] --vendor 'Smart VRMS' --description 'Smart VRMS connected fleet prototype - other business workflows incomplete'
+& (Join-Path $jdkPath 'bin/jpackage.exe') --type app-image --input $inputDir --dest $jpackageTemp --name SmartVRMS --main-jar desktop-0.1.0-SNAPSHOT.jar --main-class in.smartvrms.desktop.DesktopMain --runtime-image $runtimeDir --app-version ($Version -split '-')[0] --vendor 'Smart VRMS' --description 'Smart VRMS authenticated rental-management beta preview'
 if ($LASTEXITCODE -ne 0) { throw 'jpackage failed.' }
+$builtImage = Join-Path $jpackageTemp 'SmartVRMS'
 $image = Join-Path $outputDir 'SmartVRMS'
+Copy-Item -LiteralPath $builtImage -Destination $image -Recurse
+Remove-Item -LiteralPath $jpackageTemp -Recurse -Force
 Copy-Item -LiteralPath 'docs/Third-Party-Notices.md','docs/Release-Audit.md' -Destination $image
 @'
-SMART VRMS - CONNECTED FLEET PROTOTYPE
+SMART VRMS - AUTHENTICATED RENTAL-MANAGEMENT BETA PREVIEW
 
 Extract the entire archive, then open SmartVRMS.exe.
 Windows 11 x64. Java is bundled; no Java installation is needed.
 This build is unsigned. Its publisher identity is not code-signed.
 
-Staff sign-in and the vehicle/category screens use the hosted company API.
-Vehicle/category records are real company data. Use only authorized staff
-accounts and approved business data on those connected screens.
-Booking, payments, return/inspection, personnel, documents, email and reports
-are not connected end to end. Other screens show fictional examples and do not
-save changes. This is a partial prototype, not a complete rental system.
+Staff sign-in and the fleet screen were confirmed against the hosted API.
+This build includes the current rental workflow implementation and local
+fixture/regression checks. Live business journeys beyond staff sign-in and
+fleet reading have not been independently accepted against the hosted database.
+Before relying on it for real rentals or money, validate every workflow using
+authorized staff and approved test records. Payment entry is manual; this is
+not statutory payroll or a production-certified accounting system. Email
+delivery and disaster-recovery drills are not confirmed operational.
 
-Use Check for updates to find a future stable GitHub release. Installing an
+Use Check for updates to find a newer GitHub release. Installing an
 update means downloading/extracting the new archive. Already downloaded
 executables do not change automatically. The public API endpoint is bundled
 as a default and may be overridden in your user profile; passwords/tokens are

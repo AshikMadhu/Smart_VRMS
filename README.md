@@ -6,17 +6,17 @@
 ![Java 17](https://img.shields.io/badge/Java-17-2b5b68?style=flat-square)
 ![Desktop](https://img.shields.io/badge/Desktop-Swing-2b5b68?style=flat-square)
 ![Windows](https://img.shields.io/badge/Preview-Windows%2011%20x64-2b5b68?style=flat-square)
-![Status](https://img.shields.io/badge/Status-Interface%20preview-d08b36?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Beta%20preview-d08b36?style=flat-square)
 
-[Download Windows Prototype](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.2-preview) · [Release Audit](docs/Release-Audit.md) · [Release Manifest](docs/Release-Manifest.md) · [Requirements](planning/Requirements-and-Verification.csv)
+[Download Windows Beta](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.0-preview) · [Release Audit](docs/Release-Audit.md) · [Release Manifest](docs/Release-Manifest.md) · [Requirements](planning/Requirements-and-Verification.csv)
 
 </div>
 
 ![Smart VRMS rental desk — fictional preview](docs/screenshots/overview-1280.png)
 
-Smart VRMS is a Java 17 and Swing rental-management application with a Java REST API and Supabase Auth/PostgreSQL backend. The currently published Windows package and the newer, unpublished source checkout are at different stages; read the status below before using either for live business work.
+Smart VRMS is a Java 17 and Swing rental-management beta with a Java REST API and Supabase Auth/PostgreSQL backend. The downloadable Windows build is the latest published source candidate; read its verification limits before using it for live business work.
 
-> **Latest published download: 0.1.2-preview.** The operator confirmed packaged staff sign-in and live Fleet reads. This proves neither live business writes nor the full rental lifecycle. The local source has additional service/UI work and fixture-based checks, but those changes are not in the published ZIP and have not passed live database/provider journeys. Do not use this preview as a complete production rental system. See [current progress](docs/Business-Prototype-Progress.md), [release audit](docs/Release-Audit.md), and the [90-requirement tracker](planning/Requirements-and-Verification.csv).
+> **Beta preview, not a production-certified product.** The hosted development environment has operator-confirmed staff sign-in and live fleet reads. The 0.2.0 preview contains the current implemented rental modules and passes local fixture/regression checks, but authenticated live writes and every end-to-end business journey have not been accepted against the hosted database. Validate before using real rentals, customer information, or money. See [release notes](docs/release-notes-preview.md), [release audit](docs/Release-Audit.md), and the [requirement tracker](planning/Requirements-and-Verification.csv).
 
 ---
 
@@ -36,12 +36,12 @@ Smart VRMS is a Java 17 and Swing rental-management application with a Java REST
 
 ## 2. Download and Installation
 
-1. Open the [latest published preview release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.1.2-preview). This is the most recent published package, not the current local source checkout.
-2. Download **`SmartVRMS-Windows-x64.zip`** (approx. 31.9 MB) and optionally **`SHA256SUMS.txt`**.
+1. Open the [latest Windows beta release](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.0-preview).
+2. Download **`SmartVRMS-Windows-x64.zip`** and **`SHA256SUMS.txt`**.
 3. *(Optional but recommended)* Verify file integrity in PowerShell:
    ```powershell
    (Get-FileHash .\SmartVRMS-Windows-x64.zip).Hash -eq (Get-Content .\SHA256SUMS.txt).Split(' ')[0]
-   # Should return True (SHA256: 7C93EAAE9067130DADD81BB3EA12F7F7B5D95A95BE1FCB65A4CD82F1369C93E3)
+   # Should return True
    ```
 4. Extract the **entire ZIP archive** into a permanent local directory (e.g., `C:\SmartVRMS` or `%USERPROFILE%\SmartVRMS`).
    *(Do NOT attempt to run `SmartVRMS.exe` directly from inside the compressed zip file without extracting; the bundled `runtime/` folder must be beside it).*
@@ -85,7 +85,7 @@ When you launch `SmartVRMS.exe` for the first time:
 
 ## 5. Backend Availability & Free-Tier Wake-Up Latency
 
-The published 0.1.2-preview connects over HTTPS to the Java API (`https://smart-vrms.onrender.com` by default).
+The 0.2.0-preview connects over HTTPS to the Java API (`https://smart-vrms.onrender.com` by default).
 
 > [!IMPORTANT]
 > **Free host availability:**
@@ -120,7 +120,7 @@ The current source contains a non-silent update checker that reads the public Gi
 - Clicking the button displays a confirmation dialog: *"A newer version is available. Open its official download page?"*.
 - Upon your explicit approval, your system default browser opens the official GitHub release page.
 - **The application never silently downloads or executes updates in the background.**
-The published 0.1.2-preview package predates this current source update-checker change.
+The release includes the non-silent update checker. It notifies users and opens the official release page; it does not replace the downloaded app automatically.
 
 ---
 
@@ -177,7 +177,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\run-preview.ps1
 
 # Rebuild Windows x64 native package (requires WiX / jpackage)
-powershell -ExecutionPolicy Bypass -File .\scripts\package-desktop-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\package-desktop-windows.ps1  # Windows x64 app-image ZIP; no system Java required
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 Purpose: confirm the Windows desktop candidate reaches the public Java API, accepts a real invited staff login, and reads the authenticated company's fleet. This is a read-only acceptance check; do not create or edit business records during this step.
 
-Prerequisites: SETUP-14 previously passed; Render service is Live; the provided `0.1.2-preview` Windows candidate ZIP is available; an invited administrator or employee account is active. Never send the staff password, database password, access token, or customer data in chat or screenshots.
+Prerequisites: SETUP-14 previously passed; Render service is Live; the provided `0.2.0-preview` Windows candidate ZIP is available; an invited administrator or employee account is active. Never send the staff password, database password, access token, or customer data in chat or screenshots.
 
 ## Manglish steps
 
@@ -30,7 +30,7 @@ Prerequisites: SETUP-14 previously passed; Render service is Live; the provided 
 
 ```text
 DONE SETUP-16
-App version: 0.1.2-preview
+App version: 0.2.0-preview
 Staff sign-in: PASS / FAIL
 Fleet screen: loaded rows / empty company / sanitized error
-``` 
+```
