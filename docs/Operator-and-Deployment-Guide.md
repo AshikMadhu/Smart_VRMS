@@ -1,6 +1,6 @@
 # Operator and deployment guide
 
-**Production deployment is blocked; the latest public package is still 0.1.2-preview.** Operator acceptance covers staff sign-in and live Fleet reads only. The newer local source wires additional modules, but those workflows have not passed real restricted-role Supabase journeys. Finance, automation, review, and reporting locally use `JdbcStaffContext` rather than the absent `vrms_private.set_app_context`; the user confirmed migration version 8 (migration 009) is recorded. The email sender/scheduler and production backup/restore are not implemented. Do not treat local fixture suites as live acceptance.
+**Production deployment is blocked; the latest public package is still 0.1.2-preview.** Operator acceptance covers current-source staff sign-in, restricted-role/TLS checks, in-transaction membership and live Fleet reads only. The newer local source wires additional modules, but those workflows have not passed real restricted-role Supabase journeys. Finance, automation, review, and reporting locally use `JdbcStaffContext` rather than the absent `vrms_private.set_app_context`; the user confirmed migration version 8 (migration 009) is recorded. The email sender/scheduler and production backup/restore are not implemented. Do not treat local fixture suites as live acceptance.
 
 ## Existing development setup
 

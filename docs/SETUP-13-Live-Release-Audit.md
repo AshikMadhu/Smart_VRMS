@@ -35,4 +35,4 @@ Runtime role superuser/BYPASSRLS/CREATEROLE/CREATEDB/replication all false: yes/
 Restricted role check: PASS / sanitized message
 ```
 
-Troubleshooting: if a query errors, stop and share the error text without secrets. Missing private schema means the wrong project or missing setup. If PowerShell scripts are blocked, report the policy error without changing machine policy. The user has since confirmed migration version 8 (migration 009) recorded in Supabase. Do not rerun it; read-only index inspection and real user-role/concurrency/storage/payment acceptance remain pending.
+Troubleshooting: if a query errors, stop and share the error text without secrets. Missing private schema means the wrong project or missing setup. If PowerShell scripts are blocked, report the policy error without changing machine policy. The user has confirmed migration version 8 and current-source staff authentication, restricted role/TLS, and in-transaction fleet read. Do not rerun migration 009; run `database/verification/005_migration_009_index_audit.sql` read-only, then continue real user-role/concurrency/storage/payment acceptance.
