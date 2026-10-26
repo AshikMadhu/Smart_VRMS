@@ -29,7 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_ledger_company_posted
 
 -- Accelerates operational reporting for active and completed rentals within reporting periods (FR-FIN-003)
 CREATE INDEX IF NOT EXISTS idx_custody_company_checkout
-    ON vrms_private.custody_records(company_id, actual_checkout_time);
+    ON vrms_private.custody_records(company_id, checkout_time);
 
 -- Accelerates maintenance incident metrics in periodic reporting (FR-DMG-001)
 CREATE INDEX IF NOT EXISTS idx_maintenance_company_created
@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_reviews_company_recorded
 
 -- Accelerates booking listing with bounded pagination and period filtering (FR-BOOK-001, NFR-PERF-001)
 CREATE INDEX IF NOT EXISTS idx_bookings_company_created
-    ON vrms_private.bookings(company_id, created_at, booking_status);
+    ON vrms_private.bookings(company_id, created_at, status);
 
 -- Accelerates private storage file auditing and access tier verification (FR-DATA-002)
 CREATE INDEX IF NOT EXISTS idx_file_metadata_company_tier

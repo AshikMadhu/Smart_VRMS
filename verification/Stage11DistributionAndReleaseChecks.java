@@ -37,6 +37,7 @@ public final class Stage11DistributionAndReleaseChecks {
         System.out.println("Starting Stage 11 distribution, update safety, and release handover checks...");
 
         testDistributionRequirementsAndChecklist();
+        testMigration009IndexColumnsMatchSchema();
         testWindowsPackageCleanlinessAndExclusions();
         testZeroCredentialLeakageInClientAndDocs();
         testDesktopConfigUpgradeSafetyAndIsolation();
@@ -144,6 +145,28 @@ public final class Stage11DistributionAndReleaseChecks {
             require(!foundServerJar, "ZIP must NOT contain server jar");
             require(!foundKeyOrCert, "ZIP must NOT contain secret keys or certificates");
         }
+    }
+
+    private static void testMigration009IndexColumnsMatchSchema() throws Exception {
+        Path migrationPath = Path.of("database/migrations/009_performance_and_audit_hardening.sql");
+        Path custodySchemaPath = Path.of("database/migrations/006_operations_and_extensions.sql");
+        Path bookingSchemaPath = Path.of("database/migrations/005_booking_engine.sql");
+        String migration = Files.readString(migrationPath, StandardCharsets.UTF_8);
+        String custodySchema = Files.readString(custodySchemaPath, StandardCharsets.UTF_8);
+        String bookingSchema = Files.readString(bookingSchemaPath, StandardCharsets.UTF_8);
+
+        require(migration.contains("custody_records(company_id, checkout_time)"),
+                "Migration 009 custody index must use the existing checkout_time column");
+        require(custodySchema.contains("checkout_time timestamptz NOT NULL"),
+                "Migration 006 must define the custody checkout_time column indexed by migration 009");
+        require(!migration.contains("actual_checkout_time"),
+                "Migration 009 must not reference nonexistent actual_checkout_time");
+        require(migration.contains("bookings(company_id, created_at, status)"),
+                "Migration 009 booking index must use the existing status column");
+        require(bookingSchema.contains("status text NOT NULL"),
+                "Migration 005 must define the booking status column indexed by migration 009");
+        require(!migration.contains("booking_status"),
+                "Migration 009 must not reference nonexistent booking_status");
     }
 
     private static void testZeroCredentialLeakageInClientAndDocs() throws Exception {
