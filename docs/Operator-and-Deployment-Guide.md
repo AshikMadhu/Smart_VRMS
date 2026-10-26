@@ -1,12 +1,12 @@
 # Operator and deployment guide
 
-**Production deployment is blocked; the latest public package is still 0.1.2-preview.** Operator acceptance covers staff sign-in and live Fleet reads only. The newer local source wires additional modules, but those workflows have not passed real restricted-role Supabase journeys. Finance, automation, review, and reporting locally use `JdbcStaffContext` rather than the absent `vrms_private.set_app_context`; the user's live schema report confirms migration versions 1–7, which includes migration 008, while migration 009 is pending confirmation. The email sender/scheduler and production backup/restore are not implemented. Do not treat local fixture suites as live acceptance.
+**Production deployment is blocked; the latest public package is still 0.1.2-preview.** Operator acceptance covers staff sign-in and live Fleet reads only. The newer local source wires additional modules, but those workflows have not passed real restricted-role Supabase journeys. Finance, automation, review, and reporting locally use `JdbcStaffContext` rather than the absent `vrms_private.set_app_context`; the user confirmed migration version 8 (migration 009) is recorded. The email sender/scheduler and production backup/restore are not implemented. Do not treat local fixture suites as live acceptance.
 
 ## Existing development setup
 
 Supabase provides Auth/PostgreSQL; it does not run the Java application API. Public signup and anonymous sign-in are disabled. Application membership is held in private tables, not user-editable Auth metadata. Migration and bootstrap scripts are operator actions for an isolated development project. Never rerun applied migrations or treat application model classes as a verified database upgrade.
 
-The first-admin setup and applied migrations 1–7 were user-reported successful. Migration `009_performance_and_audit_hardening.sql` is a later optional index/query-hardening change; verify the migration registry and SQL against the live project before applying it. Never rerun previously applied migrations or change the user's production records during tests.
+The first-admin setup and applied migrations 1–8 were user-reported successful. Migration `009_performance_and_audit_hardening.sql` was recorded by the user in Supabase. Do not rerun it. Verify the resulting indexes read-only and continue restricted-role acceptance without changing real business records.
 
 ## Server configuration inputs
 

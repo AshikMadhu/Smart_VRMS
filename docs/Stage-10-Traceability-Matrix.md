@@ -3,7 +3,7 @@
 This traceability matrix maps all 90 requirement IDs from `planning/Requirements-and-Verification.csv`. Its local test labels describe code/fixture checks only. **They do not prove successful writes to the user's Supabase database, a live email/storage provider, or an end-to-end hosted rental.** Operator-accepted live evidence currently covers packaged staff sign-in and Fleet reads only.
 
 Known implementation gates in the current source:
-- Finance, automation, and review/reporting adapters were changed locally to use `JdbcStaffContext` in explicit transactions; no server source now calls `vrms_private.set_app_context`. These paths still need live restricted-role verification. The user's reported schema versions 1–7 include migration 008; migration 009 is the only later local migration awaiting confirmation.
+- Finance, automation, and review/reporting adapters were changed locally to use `JdbcStaffContext` in explicit transactions; no server source now calls `vrms_private.set_app_context`. These paths still need live restricted-role verification. The user has confirmed migration version 8 (migration 009) recorded in Supabase; read-only index inspection and live journey acceptance remain pending.
 - There is no scheduled background reminder worker or outbound email sender. The outbox can store/scan work, but messages are not sent; queue status is not delivery.
 - `BackupAndRecoveryManager.createBackup` is deliberately disabled because its legacy export was plaintext and omitted Storage objects. Fixture hash checks are not a backup/restore drill.
 - The local source changes are not in the published `0.1.2-preview` Windows ZIP.
@@ -119,7 +119,7 @@ Statuses below are categorized as:
 
 The following acceptance gates remain. The local suites are fixture/source checks and do not prove these operations:
 
-1. **Database integration**: Supabase Auth, restricted JDBC/RLS, and live Fleet read were accepted by the operator. Finance/automation/review/report adapters now use the verified transaction context in local source, but authenticated business writes, real authorization denials, migration 009, and transaction compatibility across every service remain untested. Do not deploy this local change until those checks pass.
+1. **Database integration**: Supabase Auth, restricted JDBC/RLS, and live Fleet read were accepted by the operator. Migration 009 is user-confirmed recorded. Finance/automation/review/report adapters now use the verified transaction context in local source, but authenticated business writes, real authorization denials, index definitions, and transaction compatibility across every service remain untested. Do not deploy this local change until those checks pass.
 2. **Invitation and private Storage**: `SUPABASE_SERVICE_ROLE_KEY` is not confirmed in Render. Until privately configured and verified, employee invitations and file operations remain unavailable.
 3. **Email/reminders**: No provider or scheduled worker/sender is implemented/configured. Outbox records are not delivered; laptop-off reminders are not available.
 4. **Recovery**: Production backup export is disabled; the fixture archive hash test is not a restore. Supabase plan capabilities must be checked on the owner's current project and with official docs.
