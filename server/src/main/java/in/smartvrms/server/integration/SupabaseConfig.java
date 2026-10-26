@@ -21,7 +21,7 @@ public final class SupabaseConfig {
     public static SupabaseConfig from(Properties properties) {
         return new SupabaseConfig(properties.getProperty("supabase.url"),properties.getProperty("supabase.publishableKey"));
     }
-    URI endpoint() { return endpoint; }
-    String publishableKey() { return publishableKey; }
+    public URI endpoint() { return endpoint; }
+    public String publishableKey() { return publishableKey; }
     @Override public String toString() { return "SupabaseConfig[values omitted]"; }
 }

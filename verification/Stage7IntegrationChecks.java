@@ -370,7 +370,7 @@ public final class Stage7IntegrationChecks {
         // Switch to Admin
         view.setSession(adminSession);
         require(view.scanRemindersBtn.isEnabled(), "Scan reminders enabled for Administrator");
-        require(view.processBatchBtn.isEnabled(), "Process batch enabled for Administrator");
+        require(!view.processBatchBtn.isEnabled(), "Email processing remains unavailable until a real sender is configured");
         require(view.correctReviewBtn.isEnabled(), "Correct review enabled for Administrator");
 
         // WorkspaceView navigation integration

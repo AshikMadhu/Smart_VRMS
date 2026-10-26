@@ -31,6 +31,66 @@ public final class FleetHttpClient {
         JsonObject json=new JsonObject();json.addProperty("categoryId",category.toString());json.addProperty("plate",plate);json.addProperty("make",make);json.addProperty("model",model);
         json.addProperty("capacity",seats);json.addProperty("dailyRatePaise",dailyPaise);json.addProperty("hourlyRatePaise",hourlyPaise);send("/api/v1/fleet/vehicles",json);
     }
+    public void freezeAsset(String assetType, UUID assetId, String reason, java.time.Instant startTime, java.time.Instant endTime){
+        JsonObject json = new JsonObject();
+        json.addProperty("assetType", assetType);
+        json.addProperty("assetId", assetId.toString());
+        json.addProperty("reason", reason);
+        if (startTime != null) json.addProperty("startTime", startTime.toString());
+        if (endTime != null) json.addProperty("endTime", endTime.toString());
+        send("/api/v1/fleet/restrictions/freeze", json);
+    }
+    public void resolveRestriction(UUID restrictionId){
+        JsonObject json = new JsonObject();
+        json.addProperty("restrictionId", restrictionId.toString());
+        send("/api/v1/fleet/restrictions/resolve", json);
+    }
+    public List<AssetRestrictionRecord> restrictions(String assetType, UUID assetId){
+        var root = send("/api/v1/fleet/restrictions?assetType=" + assetType + "&assetId=" + assetId, null);
+        List<AssetRestrictionRecord> list = new ArrayList<>();
+        if (root.has("restrictions")) {
+            for (var elem : root.getAsJsonArray("restrictions")) {
+                var row = elem.getAsJsonObject();
+                list.add(new AssetRestrictionRecord(
+                    uuid(row, "id"), uuid(row, "companyId"), text(row, "assetType"), uuid(row, "assetId"),
+                    text(row, "restrictionType"), java.time.Instant.parse(text(row, "startTime")),
+                    row.has("endTime") && !row.get("endTime").isJsonNull() ? java.time.Instant.parse(text(row, "endTime")) : null,
+                    text(row, "reason"), row.has("active") && row.get("active").getAsBoolean()
+                ));
+            }
+        }
+        return List.copyOf(list);
+    }
+    public List<VehicleDocumentRecord> documents(UUID vehicleId){
+        var root = send("/api/v1/fleet/documents?vehicleId=" + vehicleId, null);
+        List<VehicleDocumentRecord> list = new ArrayList<>();
+        if (root.has("documents")) {
+            for (var elem : root.getAsJsonArray("documents")) {
+                var row = elem.getAsJsonObject();
+                list.add(new VehicleDocumentRecord(
+                    uuid(row, "id"), uuid(row, "companyId"), uuid(row, "vehicleId"),
+                    text(row, "docType"), uuid(row, "fileId"),
+                    java.time.LocalDate.parse(text(row, "issueDate")),
+                    row.has("expiryDate") && !row.get("expiryDate").isJsonNull() ? java.time.LocalDate.parse(text(row, "expiryDate")) : null,
+                    row.has("version") ? row.get("version").getAsInt() : 1
+                ));
+            }
+        }
+        return List.copyOf(list);
+    }
+    public void addDocument(UUID vehicleId, String docType, UUID fileId, java.time.LocalDate issueDate, java.time.LocalDate expiryDate){
+        JsonObject json = new JsonObject();
+        json.addProperty("vehicleId", vehicleId.toString());
+        json.addProperty("docType", docType);
+        json.addProperty("fileId", fileId.toString());
+        if (issueDate != null) json.addProperty("issueDate", issueDate.toString());
+        if (expiryDate != null) json.addProperty("expiryDate", expiryDate.toString());
+        send("/api/v1/fleet/documents", json);
+    }
+    public String downloadUrl(UUID fileId) {
+        var root = send("/api/v1/files/download?fileId=" + fileId, null);
+        return text(root, "downloadUrl");
+    }
     private JsonObject send(String path,JsonObject payload){
         var builder=HttpRequest.newBuilder(endpoint.resolve(path)).timeout(Duration.ofSeconds(20)).header("Accept","application/json")
             .header("Authorization","Bearer "+session.accessToken());

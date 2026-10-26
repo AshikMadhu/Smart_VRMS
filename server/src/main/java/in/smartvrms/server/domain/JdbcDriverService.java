@@ -26,8 +26,21 @@ public final class JdbcDriverService implements DriverPort {
         Objects.requireNonNull(licenceNumber, "licenceNumber");
         Objects.requireNonNull(expiry, "expiry");
         if (classes == null || classes.isEmpty()) throw new IllegalArgumentException("Driver licence classes required");
+        String cleanLicence = licenceNumber.strip();
+        if (cleanLicence.length() < 3 || cleanLicence.length() > 50) {
+            throw new IllegalArgumentException("Licence number must be between 3 and 50 characters");
+        }
+        if (experienceYears < 0) {
+            throw new IllegalArgumentException("Experience years cannot be negative");
+        }
 
-        String sql = """
+        String lookupEmployeeSql = """
+            SELECT full_name, contact_number, employment_status
+            FROM vrms_private.employees
+            WHERE id = ? AND company_id = ?
+            """;
+
+        String insertSql = """
             INSERT INTO vrms_private.driver_profiles
                 (company_id, employee_id, licence_number, licence_classes, licence_expiry, experience_years, duty_status)
             VALUES (?, ?, ?, ?, ?, ?, 'AVAILABLE')
@@ -38,24 +51,41 @@ public final class JdbcDriverService implements DriverPort {
             c.setAutoCommit(false);
             try {
                 in.smartvrms.server.security.JdbcStaffContext.require(c, session, in.smartvrms.server.security.Capability.MANAGE_DRIVER_MASTER);
+
+                String empName;
+                String empContact;
+                boolean isEmployed;
+                try (PreparedStatement es = c.prepareStatement(lookupEmployeeSql)) {
+                    es.setObject(1, employeeId);
+                    es.setObject(2, session.companyId());
+                    try (ResultSet er = es.executeQuery()) {
+                        if (!er.next()) {
+                            throw new IllegalArgumentException("Employee not found in company: " + employeeId);
+                        }
+                        empName = er.getString("full_name");
+                        empContact = er.getString("contact_number");
+                        isEmployed = "ACTIVE".equalsIgnoreCase(er.getString("employment_status"));
+                    }
+                }
+
                 DriverProfileRecord record;
-                try (PreparedStatement s = c.prepareStatement(sql)) {
+                try (PreparedStatement s = c.prepareStatement(insertSql)) {
                     s.setObject(1, session.companyId());
                     s.setObject(2, employeeId);
-                    s.setString(3, licenceNumber.strip());
+                    s.setString(3, cleanLicence);
                     s.setArray(4, c.createArrayOf("text", classes.toArray(new String[0])));
                     s.setDate(5, java.sql.Date.valueOf(expiry));
-                    s.setInt(6, Math.max(0, experienceYears));
+                    s.setInt(6, experienceYears);
                     try (ResultSet r = s.executeQuery()) {
                         if (!r.next()) throw new IllegalStateException("Failed to register driver");
                         UUID id = r.getObject(1, UUID.class);
                         record = new DriverProfileRecord(
-                            id, session.companyId(), employeeId, "Driver Name", "Contact",
-                            licenceNumber.strip(), classes, expiry, experienceYears, "AVAILABLE", true
+                            id, session.companyId(), employeeId, empName, empContact,
+                            cleanLicence, classes, expiry, experienceYears, "AVAILABLE", isEmployed
                         );
                     }
                 }
-                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "DRIVER_REGISTERED", "DRIVER", record.id().toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("licence", licenceNumber));
+                in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "DRIVER_REGISTERED", "DRIVER", record.id().toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("licence", cleanLicence));
                 c.commit();
                 return record;
             } catch (Exception e) {
@@ -129,6 +159,9 @@ public final class JdbcDriverService implements DriverPort {
         Objects.requireNonNull(session, "session");
         Objects.requireNonNull(driverId, "driverId");
         Objects.requireNonNull(dutyStatus, "dutyStatus");
+        if (!List.of("AVAILABLE", "ASSIGNED", "ON_LEAVE", "UNAVAILABLE").contains(dutyStatus)) {
+            throw new IllegalArgumentException("Invalid duty status. Must be one of AVAILABLE, ASSIGNED, ON_LEAVE, UNAVAILABLE");
+        }
 
         String sql = """
             UPDATE vrms_private.driver_profiles
@@ -144,7 +177,10 @@ public final class JdbcDriverService implements DriverPort {
                     s.setString(1, dutyStatus);
                     s.setObject(2, driverId);
                     s.setObject(3, session.companyId());
-                    s.executeUpdate();
+                    int updated = s.executeUpdate();
+                    if (updated == 0) {
+                        throw new IllegalArgumentException("Driver profile not found: " + driverId);
+                    }
                 }
                 in.smartvrms.server.security.JdbcBusinessAudit.append(c, session, "DRIVER_STATUS_UPDATED", "DRIVER", driverId.toString(), in.smartvrms.server.security.JdbcBusinessAudit.detail("status", dutyStatus));
                 c.commit();

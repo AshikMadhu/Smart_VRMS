@@ -63,4 +63,11 @@ public interface AutomationPort {
      * Retrieves recent delivery attempts for an outbox message.
      */
     List<DeliveryAttemptRecord> listAttempts(StaffSession session, UUID messageId);
+
+    /**
+     * Lists recent outbox messages for the authenticated company.
+     */
+    default List<OutboxMessageRecord> listRecentMessages(StaffSession session, int limit) {
+        return List.of();
+    }
 }

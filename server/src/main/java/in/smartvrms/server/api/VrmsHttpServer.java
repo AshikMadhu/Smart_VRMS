@@ -241,6 +241,7 @@ public final class VrmsHttpServer {
         this.server.createContext("/api/v1/fleet/categories", exchange -> handleAuthRoute(exchange, this::handleFleetCategories));
         this.server.createContext("/api/v1/fleet/restrictions/freeze", exchange -> handleAuthRoute(exchange, this::handleRestrictionFreeze));
         this.server.createContext("/api/v1/fleet/restrictions/resolve", exchange -> handleAuthRoute(exchange, this::handleRestrictionResolve));
+        this.server.createContext("/api/v1/fleet/restrictions", exchange -> handleAuthRoute(exchange, this::handleRestrictionRoute));
         this.server.createContext("/api/v1/fleet/documents", exchange -> handleAuthRoute(exchange, this::handleDocumentRoute));
 
         // Stage 3 Driver routes
@@ -250,6 +251,7 @@ public final class VrmsHttpServer {
         // Stage 3 Customer routes
         this.server.createContext("/api/v1/customers", exchange -> handleAuthRoute(exchange, this::handleCustomerRoute));
         this.server.createContext("/api/v1/customers/search", exchange -> handleAuthRoute(exchange, this::handleCustomerSearch));
+        this.server.createContext("/api/v1/customers/duplicate", exchange -> handleAuthRoute(exchange, this::handleCustomerDuplicate));
         this.server.createContext("/api/v1/customers/visits", exchange -> handleAuthRoute(exchange, this::handleCustomerVisitRoute));
 
         // Stage 4 Booking routes
@@ -283,6 +285,7 @@ public final class VrmsHttpServer {
         this.server.createContext("/api/v1/finance/ledger", exchange -> handleAuthRoute(exchange, this::handleLedgerRoute));
 
         // Stage 7 Automation routes
+        this.server.createContext("/api/v1/automation/outbox", exchange -> handleAuthRoute(exchange, this::handleOutboxList));
         this.server.createContext("/api/v1/automation/outbox/claim", exchange -> handleAuthRoute(exchange, this::handleOutboxClaim));
         this.server.createContext("/api/v1/automation/outbox/complete", exchange -> handleAuthRoute(exchange, this::handleOutboxComplete));
         this.server.createContext("/api/v1/automation/outbox/fail", exchange -> handleAuthRoute(exchange, this::handleOutboxFail));
@@ -473,7 +476,16 @@ public final class VrmsHttpServer {
             idempotency.recordPending(session, idemKey, "INVITE_EMPLOYEE", hash, 300);
         }
 
-        MemberManagementRecord record = provisioning.inviteEmployee(session, email, fullName);
+        MemberManagementRecord record;
+        try {
+            record = provisioning.inviteEmployee(session, email, fullName);
+        } catch (IllegalStateException ex) {
+            if (ex.getMessage() != null && ex.getMessage().toLowerCase(Locale.ROOT).contains("unavailable")) {
+                sendError(exchange, 503, ex.getMessage(), correlationId);
+                return;
+            }
+            throw ex;
+        }
 
         JsonObject res = new JsonObject();
         res.addProperty("authUserId", record.authUserId().toString());
@@ -682,12 +694,15 @@ public final class VrmsHttpServer {
         UUID fileId = UUID.fromString(query.get("fileId"));
         int expiresIn = query.containsKey("expiresIn") ? Integer.parseInt(query.get("expiresIn")) : 300;
 
-        String downloadUrl = storage.generateSignedDownloadUrl(session, fileId, expiresIn);
-
-        JsonObject res = new JsonObject();
-        res.addProperty("downloadUrl", downloadUrl);
-        res.addProperty("expiresInSeconds", expiresIn);
-        sendJsonResponse(exchange, 200, res);
+        try {
+            String downloadUrl = storage.generateSignedDownloadUrl(session, fileId, expiresIn);
+            JsonObject res = new JsonObject();
+            res.addProperty("downloadUrl", downloadUrl);
+            res.addProperty("expiresInSeconds", expiresIn);
+            sendJsonResponse(exchange, 200, res);
+        } catch (IllegalStateException ise) {
+            sendError(exchange, 503, ise.getMessage(), correlationId);
+        }
     }
 
     // =========================================================================
@@ -1026,13 +1041,46 @@ public final class VrmsHttpServer {
             sendError(exchange, 401, "Missing Bearer token.", correlationId);
             return;
         }
-        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.MANAGE_VEHICLE_MASTER);
+        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.APPROVE_MAINTENANCE_RESOLUTION);
         StaffSession session = toStaffSession(staff);
         JsonObject req = parseJsonBody(exchange);
         UUID restrictionId = UUID.fromString(requireStringField(req, "restrictionId"));
         fleet.resolveAssetRestriction(session, restrictionId);
         JsonObject res = new JsonObject();
         res.addProperty("status", "resolved");
+        sendJsonResponse(exchange, 200, res);
+    }
+
+    private void handleRestrictionRoute(HttpExchange exchange, String correlationId) throws Exception {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendError(exchange, 405, "Method Not Allowed. Use GET.", correlationId);
+            return;
+        }
+        if (fleet == null) {
+            sendError(exchange, 503, "Fleet service not configured.", correlationId);
+            return;
+        }
+        String token = extractBearerToken(exchange);
+        if (token == null) {
+            sendError(exchange, 401, "Missing Bearer token.", correlationId);
+            return;
+        }
+        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.VIEW_FLEET);
+        StaffSession session = toStaffSession(staff);
+
+        Map<String, String> query = parseQueryParams(exchange.getRequestURI().getQuery());
+        String assetType = query.get("assetType");
+        String assetIdStr = query.get("assetId");
+        if (assetType == null || assetIdStr == null) {
+            sendError(exchange, 400, "Missing required query parameters: assetType and assetId", correlationId);
+            return;
+        }
+        UUID assetId = UUID.fromString(assetIdStr);
+        List<AssetRestrictionRecord> list = fleet.listAssetRestrictions(session, assetType, assetId);
+        JsonArray arr = new JsonArray();
+        for (var r : list) arr.add(restrictionToJson(r));
+        JsonObject res = new JsonObject();
+        res.add("restrictions", arr);
         sendJsonResponse(exchange, 200, res);
     }
 
@@ -1212,6 +1260,36 @@ public final class VrmsHttpServer {
         for (var c : list) arr.add(customerToJson(c));
         JsonObject res = new JsonObject();
         res.add("customers", arr);
+        sendJsonResponse(exchange, 200, res);
+    }
+
+    private void handleCustomerDuplicate(HttpExchange exchange, String correlationId) throws Exception {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendError(exchange, 405, "Method Not Allowed. Use GET.", correlationId);
+            return;
+        }
+        if (customer == null) {
+            sendError(exchange, 503, "Customer service not configured.", correlationId);
+            return;
+        }
+        String token = extractBearerToken(exchange);
+        if (token == null) {
+            sendError(exchange, 401, "Missing Bearer token.", correlationId);
+            return;
+        }
+        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.BOOK_STANDARD_RENTAL);
+        StaffSession session = toStaffSession(staff);
+        Map<String, String> query = parseQueryParams(exchange.getRequestURI().getQuery());
+        String mobile = query.get("mobile");
+        String email = query.get("email");
+        Optional<CustomerRecord> dup = customer.findDuplicateCustomer(session, mobile, email);
+        JsonObject res = new JsonObject();
+        if (dup.isPresent()) {
+            res.addProperty("duplicateFound", true);
+            res.add("customer", customerToJson(dup.get()));
+        } else {
+            res.addProperty("duplicateFound", false);
+        }
         sendJsonResponse(exchange, 200, res);
     }
 
@@ -1688,9 +1766,13 @@ public final class VrmsHttpServer {
         for (BookingAssignmentRecord a : b.assignments()) {
             JsonObject item = new JsonObject();
             item.addProperty("id", a.id().toString());
+            item.addProperty("companyId", a.companyId().toString());
+            item.addProperty("bookingId", a.bookingId().toString());
             item.addProperty("vehicleId", a.vehicleId().toString());
             if (a.driverId() != null) item.addProperty("driverId", a.driverId().toString());
             item.addProperty("driverRequired", a.driverRequired());
+            item.addProperty("startTime", a.startTime().toString());
+            item.addProperty("endTime", a.endTime().toString());
             item.addProperty("dailyRatePaise", a.dailyRatePaise());
             item.addProperty("hourlyRatePaise", a.hourlyRatePaise());
             item.addProperty("vehicleTotalPaise", a.vehicleTotalPaise());
@@ -2654,6 +2736,39 @@ public final class VrmsHttpServer {
     // Stage 7: Automation Handlers (FR-MSG-001, FR-DOC-003, FR-DOC-004)
     // =========================================================================
 
+    private void handleOutboxList(HttpExchange exchange, String correlationId) throws Exception {
+        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendError(exchange, 405, "Method Not Allowed. Use GET.", correlationId);
+            return;
+        }
+        if (automation == null) {
+            sendError(exchange, 503, "Automation service not configured.", correlationId);
+            return;
+        }
+        String token = extractBearerToken(exchange);
+        if (token == null) {
+            sendError(exchange, 401, "Missing Bearer token.", correlationId);
+            return;
+        }
+        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.MANAGE_NOTIFICATIONS);
+        StaffSession session = toStaffSession(staff);
+
+        Map<String, String> q = parseQueryParams(exchange.getRequestURI().getQuery());
+        int limit = 50;
+        if (q.containsKey("limit")) {
+            try { limit = Integer.parseInt(q.get("limit")); } catch (NumberFormatException ignored) {}
+        }
+
+        List<OutboxMessageRecord> list = automation.listRecentMessages(session, limit);
+        JsonArray array = new JsonArray();
+        for (OutboxMessageRecord m : list) {
+            array.add(outboxMessageToJson(m));
+        }
+        JsonObject res = new JsonObject();
+        res.add("messages", array);
+        sendJsonResponse(exchange, 200, res);
+    }
+
     private void handleOutboxClaim(HttpExchange exchange, String correlationId) throws Exception {
         if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             sendError(exchange, 405, "Method Not Allowed. Use POST.", correlationId);
@@ -2669,20 +2784,7 @@ public final class VrmsHttpServer {
             return;
         }
         StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.MANAGE_NOTIFICATIONS);
-        StaffSession session = toStaffSession(staff);
-
-        JsonObject req = parseJsonBody(exchange);
-        int batchSize = req.has("batchSize") ? req.get("batchSize").getAsInt() : 10;
-        int leaseDurationSeconds = req.has("leaseDurationSeconds") ? req.get("leaseDurationSeconds").getAsInt() : 300;
-
-        List<OutboxMessageRecord> claimed = automation.claimBatch("api-worker-" + staff.userId(), batchSize, leaseDurationSeconds);
-        JsonArray array = new JsonArray();
-        for (OutboxMessageRecord m : claimed) {
-            array.add(outboxMessageToJson(m));
-        }
-        JsonObject res = new JsonObject();
-        res.add("messages", array);
-        sendJsonResponse(exchange, 200, res);
+        sendError(exchange, 503, "Email delivery is unavailable: no provider worker is configured.", correlationId);
     }
 
     private void handleOutboxComplete(HttpExchange exchange, String correlationId) throws Exception {
@@ -2699,19 +2801,8 @@ public final class VrmsHttpServer {
             sendError(exchange, 401, "Missing Bearer token.", correlationId);
             return;
         }
-        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.MANAGE_NOTIFICATIONS);
-        StaffSession session = toStaffSession(staff);
-
-        JsonObject req = parseJsonBody(exchange);
-        UUID outboxId = UUID.fromString(requireStringField(req, "outboxId"));
-        String providerName = requireStringField(req, "providerName");
-        int responseCode = req.has("responseCode") ? req.get("responseCode").getAsInt() : 200;
-        String providerMessageId = req.has("providerMessageId") && !req.get("providerMessageId").isJsonNull() ? req.get("providerMessageId").getAsString() : null;
-
-        automation.markAccepted(outboxId, providerName, responseCode, providerMessageId);
-        JsonObject res = new JsonObject();
-        res.addProperty("status", "ACCEPTED");
-        sendJsonResponse(exchange, 200, res);
+        authorizer.authorize(token, Capability.MANAGE_NOTIFICATIONS);
+        sendError(exchange, 503, "Email delivery is unavailable: provider acceptance cannot be verified.", correlationId);
     }
 
     private void handleOutboxFail(HttpExchange exchange, String correlationId) throws Exception {
@@ -2728,20 +2819,8 @@ public final class VrmsHttpServer {
             sendError(exchange, 401, "Missing Bearer token.", correlationId);
             return;
         }
-        StaffAuthorizer.Staff staff = authorizer.authorize(token, Capability.MANAGE_NOTIFICATIONS);
-        StaffSession session = toStaffSession(staff);
-
-        JsonObject req = parseJsonBody(exchange);
-        UUID outboxId = UUID.fromString(requireStringField(req, "outboxId"));
-        String providerName = requireStringField(req, "providerName");
-        int responseCode = req.has("responseCode") ? req.get("responseCode").getAsInt() : 500;
-        String errorMessage = requireStringField(req, "errorMessage");
-        boolean permanent = req.has("permanent") && req.get("permanent").getAsBoolean();
-
-        automation.markFailed(outboxId, providerName, errorMessage, permanent);
-        JsonObject res = new JsonObject();
-        res.addProperty("status", permanent ? "FAILED" : "QUEUED");
-        sendJsonResponse(exchange, 200, res);
+        authorizer.authorize(token, Capability.MANAGE_NOTIFICATIONS);
+        sendError(exchange, 503, "Email delivery is unavailable: no provider worker is configured.", correlationId);
     }
 
     private void handleReminderScan(HttpExchange exchange, String correlationId) throws Exception {

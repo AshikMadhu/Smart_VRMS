@@ -45,7 +45,26 @@ public final class DesktopMain {
         SignInView signIn = new SignInView(authPort, result -> {
             activeSession.accept(result);
             workspace.setSession(result.session());
-            if(config.apiEndpoint().isPresent())workspace.connectFleet(new in.smartvrms.desktop.integration.FleetHttpClient(config,activeSession));
+            if (config.apiEndpoint().isPresent()) {
+                var fleetHttp = new in.smartvrms.desktop.integration.FleetHttpClient(config, activeSession);
+                var personnelHttp = new in.smartvrms.desktop.integration.PersonnelHttpClient(config, activeSession);
+                var driverHttp = new in.smartvrms.desktop.integration.DriverHttpClient(config, activeSession);
+                var customerHttp = new in.smartvrms.desktop.integration.CustomerHttpClient(config, activeSession);
+                var bookingHttp = new in.smartvrms.desktop.integration.BookingHttpClient(config, activeSession);
+                var operationsHttp = new in.smartvrms.desktop.integration.OperationsHttpClient(config, activeSession);
+                var financeHttp = new in.smartvrms.desktop.integration.FinanceHttpClient(config, activeSession);
+                var automationHttp = new in.smartvrms.desktop.integration.AutomationHttpClient(config, activeSession);
+                var reviewHttp = new in.smartvrms.desktop.integration.ReviewHttpClient(config, activeSession);
+                var reportingHttp = new in.smartvrms.desktop.integration.ReportingHttpClient(config, activeSession);
+                workspace.connectFleet(fleetHttp);
+                workspace.connectCustomers(customerHttp);
+                workspace.connectPersonnel(personnelHttp);
+                workspace.connectDrivers(driverHttp, personnelHttp);
+                workspace.connectBooking(bookingHttp, customerHttp, fleetHttp);
+                workspace.connectOperations(operationsHttp);
+                workspace.connectFinance(financeHttp);
+                workspace.connectAutomationAndReports(automationHttp, reviewHttp, reportingHttp);
+            }
             cards.show(root, "workspace");
         }, () -> cards.show(root, "workspace"));
         root.add(signIn, "signin");

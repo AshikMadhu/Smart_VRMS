@@ -61,6 +61,15 @@ public final class PeriodCalculator {
     }
 
     /**
+     * Resolves the end of the Monday-based week (Sunday 23:59:59) in Asia/Kolkata.
+     */
+    public static Instant getMondayWeekEnd(Instant time) {
+        Objects.requireNonNull(time, "time");
+        LocalDate date = time.atZone(ZONE).toLocalDate().with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
+        return date.atTime(23, 59, 59).atZone(ZONE).toInstant();
+    }
+
+    /**
      * Formats period date range for reports.
      */
     public static String formatPeriodRange(Instant from, Instant to) {

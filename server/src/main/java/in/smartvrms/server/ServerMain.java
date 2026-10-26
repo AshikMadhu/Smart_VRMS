@@ -61,11 +61,33 @@ public final class ServerMain {
             startupPhase = "API initialization";
             SupabaseAuth auth = new SupabaseAuth(supabaseConfig);
             StaffAuthorizer authorizer = new StaffAuthorizer(auth, dataSource);
+            String serviceRoleKey = System.getenv("SUPABASE_SERVICE_ROLE_KEY");
+            var inviteProvider = in.smartvrms.server.security.JdbcStaffProvisioningService.createSupabaseInviteProvider(
+                    supabaseConfig.endpoint(), serviceRoleKey);
+            var provisioning = new in.smartvrms.server.security.JdbcStaffProvisioningService(dataSource, inviteProvider);
+            String storageBaseUrl = supabaseConfig.endpoint().toString() + "/storage/v1";
+            var fileStorage = new in.smartvrms.server.security.JdbcFileStorageService(dataSource, storageBaseUrl, serviceRoleKey);
+            var auditService = new in.smartvrms.server.security.JdbcAuditService(dataSource);
+            var idempotencyService = new in.smartvrms.server.security.JdbcIdempotencyService(dataSource);
+            var customerService = new in.smartvrms.server.domain.JdbcCustomerService(dataSource, auditService);
+            var bookingService = new in.smartvrms.server.domain.JdbcBookingService(dataSource, auditService, idempotencyService);
+            var operationsService = new in.smartvrms.server.domain.JdbcOperationsService(dataSource, auditService);
+            var financeService = new in.smartvrms.server.domain.JdbcFinanceService(dataSource, auditService);
+            var automationService = new in.smartvrms.server.domain.JdbcAutomationService(dataSource, auditService);
+            var reviewService = new in.smartvrms.server.domain.JdbcReviewService(dataSource, auditService);
+            var reportingService = new in.smartvrms.server.domain.JdbcReportingService(dataSource, auditService);
             VrmsHttpServer server = new VrmsHttpServer(HttpServerConfig.fromEnvironment(System.getenv()), auth, authorizer::authorize,
-                    null,null,null,null,
-                    new in.smartvrms.server.domain.JdbcPersonnelService(dataSource,null),
-                    new in.smartvrms.server.domain.JdbcFleetService(dataSource,null),
-                    new in.smartvrms.server.domain.JdbcDriverService(dataSource,null),null);
+                    fileStorage, auditService, idempotencyService, provisioning,
+                    new in.smartvrms.server.domain.JdbcPersonnelService(dataSource, auditService),
+                    new in.smartvrms.server.domain.JdbcFleetService(dataSource, auditService),
+                    new in.smartvrms.server.domain.JdbcDriverService(dataSource, auditService),
+                    customerService,
+                    bookingService,
+                    operationsService,
+                    financeService,
+                    automationService,
+                    reviewService,
+                    reportingService);
 
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOG.info("Shutdown signal received; stopping VrmsHttpServer...");

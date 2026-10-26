@@ -18,6 +18,8 @@ import in.smartvrms.contracts.StaffSession;
 import in.smartvrms.server.finance.FinancialLedgerEngine;
 import in.smartvrms.server.finance.PdfDocumentGenerator;
 import in.smartvrms.server.finance.QrCodeGenerator;
+import in.smartvrms.server.security.Capability;
+import in.smartvrms.server.security.JdbcStaffContext;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -55,12 +57,9 @@ public class JdbcFinanceService implements FinancePort {
         }
     }
 
-    private void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("SELECT vrms_private.set_app_context(?, ?)")) {
-            ps.setObject(1, session.userId());
-            ps.setObject(2, session.companyId());
-            ps.execute();
-        }
+    private void setContext(Connection c, StaffSession session, Capability capability) throws SQLException {
+        if (c.getAutoCommit()) c.setAutoCommit(false);
+        JdbcStaffContext.require(c, session, capability);
     }
 
     @Override
@@ -80,7 +79,7 @@ public class JdbcFinanceService implements FinancePort {
         Instant due = dueAt != null ? dueAt : Instant.now().plusSeconds(86400 * 2);
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.BOOK_STANDARD_RENTAL);
 
             UUID customerId;
             String bookingNumber;
@@ -130,6 +129,7 @@ public class JdbcFinanceService implements FinancePort {
                 }
             }
 
+            c.commit();
             if (auditPort != null) {
                 auditPort.recordEvent(session, "CREATE_PAYMENT_REQUEST", "PAYMENT_REQUEST", reqId.toString(),
                         "{\"amountPaise\":" + amountPaise + ",\"bookingId\":\"" + bookingId + "\"}");
@@ -163,7 +163,7 @@ public class JdbcFinanceService implements FinancePort {
         Objects.requireNonNull(requestId, "requestId");
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.VIEW_OPERATIONAL_BALANCE);
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT qr_payload, merchant_vpa, merchant_name, amount_paise " +
                     "FROM vrms_private.payment_requests WHERE company_id = ? AND id = ?")) {
@@ -200,7 +200,7 @@ public class JdbcFinanceService implements FinancePort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.RECORD_VERIFIED_PAYMENT);
 
                 // Check duplicate external reference if provided
                 if (cmd.externalReference() != null && !cmd.externalReference().isBlank()) {
@@ -355,25 +355,38 @@ public class JdbcFinanceService implements FinancePort {
     }
 
     private void recordDepositReceived(Connection c, UUID companyId, UUID bookingId, UUID customerId, long amount) throws SQLException {
+        UUID existingId = null;
         try (PreparedStatement ps = c.prepareStatement(
-                "INSERT INTO vrms_private.refundable_deposits " +
-                "(company_id, booking_id, customer_id, deposit_received_paise, status) " +
-                "VALUES (?, ?, ?, ?, 'HELD') " +
-                "ON CONFLICT DO NOTHING")) {
+                "SELECT id FROM vrms_private.refundable_deposits WHERE company_id = ? AND booking_id = ? FOR UPDATE")) {
             ps.setObject(1, companyId);
             ps.setObject(2, bookingId);
-            ps.setObject(3, customerId);
-            ps.setLong(4, amount);
-            ps.executeUpdate();
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    existingId = (UUID) rs.getObject(1);
+                }
+            }
         }
-        try (PreparedStatement ps = c.prepareStatement(
-                "UPDATE vrms_private.refundable_deposits " +
-                "SET deposit_received_paise = deposit_received_paise + ?, status = 'HELD' " +
-                "WHERE company_id = ? AND booking_id = ?")) {
-            ps.setLong(1, amount);
-            ps.setObject(2, companyId);
-            ps.setObject(3, bookingId);
-            ps.executeUpdate();
+
+        if (existingId == null) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO vrms_private.refundable_deposits " +
+                    "(company_id, booking_id, customer_id, deposit_received_paise, status) " +
+                    "VALUES (?, ?, ?, ?, 'HELD')")) {
+                ps.setObject(1, companyId);
+                ps.setObject(2, bookingId);
+                ps.setObject(3, customerId);
+                ps.setLong(4, amount);
+                ps.executeUpdate();
+            }
+        } else {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE vrms_private.refundable_deposits " +
+                    "SET deposit_received_paise = deposit_received_paise + ?, status = 'HELD' " +
+                    "WHERE id = ?")) {
+                ps.setLong(1, amount);
+                ps.setObject(2, existingId);
+                ps.executeUpdate();
+            }
         }
     }
 
@@ -403,7 +416,7 @@ public class JdbcFinanceService implements FinancePort {
         List<PaymentRecord> list = new ArrayList<>();
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.VIEW_OPERATIONAL_BALANCE);
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT id, company_id, booking_id, customer_id, payment_request_id, amount_paise, currency, " +
                     "payment_method, external_reference, status, verification_evidence, verified_by, verified_at, notes, created_at " +
@@ -444,7 +457,7 @@ public class JdbcFinanceService implements FinancePort {
         Objects.requireNonNull(bookingId, "bookingId");
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.VIEW_OPERATIONAL_BALANCE);
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT id, company_id, booking_id, customer_id, deposit_received_paise, deposit_refunded_paise, " +
                     "deposit_applied_paise, status, held_at, refunded_at, refund_ref, refund_approved_by, notes " +
@@ -494,7 +507,7 @@ public class JdbcFinanceService implements FinancePort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.POST_REFUND);
 
                 UUID depositId;
                 UUID customerId;
@@ -595,7 +608,7 @@ public class JdbcFinanceService implements FinancePort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.CORRECT_FINANCIAL_ENTRY);
 
                 UUID corrId;
                 Instant createdAt;
@@ -662,7 +675,7 @@ public class JdbcFinanceService implements FinancePort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.FINALIZE_STANDARD_INVOICE);
 
                 UUID customerId;
                 String bookingNumber;
@@ -765,7 +778,7 @@ public class JdbcFinanceService implements FinancePort {
         List<BillingDocumentRecord> list = new ArrayList<>();
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.READ_RENTAL_DOCUMENT);
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT id, company_id, booking_id, customer_id, document_type, document_number, document_version, " +
                     "status, total_paise, advance_paid_paise, balance_due_paise, deposit_held_paise, tax_paise, " +
@@ -811,7 +824,7 @@ public class JdbcFinanceService implements FinancePort {
         Objects.requireNonNull(documentId, "documentId");
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.READ_RENTAL_DOCUMENT);
 
             BillingDocumentRecord doc = null;
             try (PreparedStatement ps = c.prepareStatement(
@@ -906,7 +919,7 @@ public class JdbcFinanceService implements FinancePort {
         Objects.requireNonNull(customerId, "customerId");
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.VIEW_OPERATIONAL_BALANCE);
 
             String customerName = "Customer";
             try (PreparedStatement ps = c.prepareStatement("SELECT name FROM vrms_private.customers WHERE company_id = ? AND id = ?")) {
@@ -1035,7 +1048,7 @@ public class JdbcFinanceService implements FinancePort {
         Instant t = to != null ? to : Instant.now();
 
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.VIEW_COMPANY_MARGIN);
 
             long revenueEarned = 0;
             long cashCollected = 0;

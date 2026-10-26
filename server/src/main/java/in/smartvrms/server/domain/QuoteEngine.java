@@ -211,4 +211,49 @@ public final class QuoteEngine {
                 lineTotal
         );
     }
+
+    /**
+     * BR-PRICE-003: 30-minute return grace. Late fee charged beyond grace rounded up to whole hours at dailyRate / 24.
+     */
+    public static long calculateLateFee(long dailyRatePaise, Instant agreedEnd, Instant actualReturn) {
+        if (agreedEnd == null || actualReturn == null || !actualReturn.isAfter(agreedEnd)) {
+            return 0L;
+        }
+        Duration delay = Duration.between(agreedEnd, actualReturn);
+        long delayMinutes = delay.toMinutes();
+        if (delayMinutes <= 30) {
+            return 0L; // Within 30-minute grace period
+        }
+        long chargeableMinutes = delayMinutes - 30;
+        long chargeableHours = (chargeableMinutes + 59) / 60; // round up to whole hours
+        long days = chargeableHours / 24;
+        long remHours = chargeableHours % 24;
+
+        long dayTotal = Math.multiplyExact(days, dailyRatePaise);
+        BigDecimal hourlyCharge = BigDecimal.valueOf(dailyRatePaise)
+                .multiply(BigDecimal.valueOf(remHours))
+                .divide(BigDecimal.valueOf(24), 0, RoundingMode.HALF_UP);
+        long remTotal = Math.min(dailyRatePaise, hourlyCharge.longValue());
+        return Math.addExact(dayTotal, remTotal);
+    }
+
+    /**
+     * BR-PRICE-002: Extension reprices the entire planned duration and charges only the delta.
+     * No second first-day minimum is applied.
+     */
+    public static long calculateExtensionDelta(long dailyRatePaise, Instant originalStart, Instant originalEnd, Instant newEnd) {
+        if (originalStart == null || originalEnd == null || newEnd == null) {
+            throw new IllegalArgumentException("Original and new interval timestamps required.");
+        }
+        if (!newEnd.isAfter(originalEnd)) {
+            throw new IllegalArgumentException("New end time must be after original end time.");
+        }
+        AssignmentQuote originalQuote = calculateAssignmentQuote(
+                UUID.randomUUID(), "Vehicle", dailyRatePaise, dailyRatePaise / 24, false, 0, 0, originalStart, originalEnd
+        );
+        AssignmentQuote extendedQuote = calculateAssignmentQuote(
+                UUID.randomUUID(), "Vehicle", dailyRatePaise, dailyRatePaise / 24, false, 0, 0, originalStart, newEnd
+        );
+        return Math.max(0L, extendedQuote.vehicleTotalPaise() - originalQuote.vehicleTotalPaise());
+    }
 }

@@ -17,14 +17,20 @@ public final class JdbcFileStorageService implements StoragePort {
 
     private final DataSource dataSource;
     private final String storageBaseUrl;
+    private final String serviceRoleKey;
 
     public JdbcFileStorageService(DataSource dataSource) {
-        this(dataSource, "https://wvtnepxynjjbazczkukh.supabase.co/storage/v1");
+        this(dataSource, "https://wvtnepxynjjbazczkukh.supabase.co/storage/v1", System.getenv("SUPABASE_SERVICE_ROLE_KEY"));
     }
 
     public JdbcFileStorageService(DataSource dataSource, String storageBaseUrl) {
+        this(dataSource, storageBaseUrl, System.getenv("SUPABASE_SERVICE_ROLE_KEY"));
+    }
+
+    public JdbcFileStorageService(DataSource dataSource, String storageBaseUrl, String serviceRoleKey) {
         this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
         this.storageBaseUrl = Objects.requireNonNull(storageBaseUrl, "storageBaseUrl");
+        this.serviceRoleKey = serviceRoleKey;
     }
 
     public static String selectBucket(FileCategory category) {
@@ -231,7 +237,45 @@ public final class JdbcFileStorageService implements StoragePort {
             throw new SecurityException("Forbidden: Employees cannot access ADMIN_ONLY files");
         }
 
-        throw new IllegalStateException("Private Storage signing is not configured. No download URL was created.");
+        if (serviceRoleKey == null || serviceRoleKey.isBlank()) {
+            throw new IllegalStateException("Private Storage signing is not configured. SUPABASE_SERVICE_ROLE_KEY is required to generate short-lived signed download URLs.");
+        }
+
+        try {
+            int duration = Math.max(60, Math.min(expiresInSeconds, 3600));
+            String signEndpoint = storageBaseUrl.replaceAll("/+$", "") + "/object/sign/" + meta.storageBucket() + "/" + meta.storagePath();
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5))
+                    .build();
+            String payload = "{\"expiresIn\":" + duration + "}";
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(signEndpoint))
+                    .timeout(java.time.Duration.ofSeconds(10))
+                    .header("Authorization", "Bearer " + serviceRoleKey)
+                    .header("apikey", serviceRoleKey)
+                    .header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload))
+                    .build();
+            java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IllegalStateException("Storage provider rejected signed URL generation (status " + response.statusCode() + ").");
+            }
+            com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(response.body()).getAsJsonObject();
+            if (!json.has("signedURL")) {
+                throw new IllegalStateException("Storage provider response did not contain signedURL.");
+            }
+            String signedPath = json.get("signedURL").getAsString();
+            if (signedPath.startsWith("http://") || signedPath.startsWith("https://")) {
+                return signedPath;
+            }
+            return storageBaseUrl.replaceAll("/+$", "") + (signedPath.startsWith("/") ? "" : "/") + signedPath;
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Storage URL signing interrupted", ie);
+        } catch (Exception ex) {
+            if (ex instanceof IllegalStateException ise) throw ise;
+            throw new IllegalStateException("Failed to communicate with storage provider", ex);
+        }
     }
 
     private static void setContext(Connection c, StaffSession session) throws SQLException {

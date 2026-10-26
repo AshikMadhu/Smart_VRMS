@@ -7,6 +7,8 @@ import in.smartvrms.contracts.OutboxMessageRecord;
 import in.smartvrms.contracts.StaffSession;
 import in.smartvrms.contracts.WorkerHealthStatus;
 import in.smartvrms.server.automation.DocumentReminderScanner;
+import in.smartvrms.server.security.Capability;
+import in.smartvrms.server.security.JdbcStaffContext;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -31,12 +33,9 @@ public class JdbcAutomationService implements AutomationPort {
         this.auditPort = auditPort;
     }
 
-    private void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("SELECT vrms_private.set_app_context(?, ?)")) {
-            ps.setObject(1, session.userId());
-            ps.setObject(2, session.companyId());
-            ps.execute();
-        }
+    private void setContext(Connection c, StaffSession session, Capability capability) throws SQLException {
+        if (c.getAutoCommit()) c.setAutoCommit(false);
+        JdbcStaffContext.require(c, session, capability);
     }
 
     private void checkStaff(StaffSession session) {
@@ -60,7 +59,7 @@ public class JdbcAutomationService implements AutomationPort {
     ) {
         checkStaff(session);
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.ENQUEUE_CUSTOMER_MESSAGE);
 
             // Check if already enqueued
             try (PreparedStatement ps = c.prepareStatement(
@@ -100,6 +99,7 @@ public class JdbcAutomationService implements AutomationPort {
                 ps.setTimestamp(12, Timestamp.from(now));
                 ps.executeUpdate();
             }
+            c.commit();
 
             return new OutboxMessageRecord(
                     id, session.companyId(), eventType, idempotencyKey, recipientEmail, recipientRole, subject,
@@ -315,21 +315,33 @@ public class JdbcAutomationService implements AutomationPort {
         checkStaff(session);
         int queuedCount = 0;
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.MANAGE_NOTIFICATIONS);
 
-            // 1. Fetch active company administrator email
-            String adminEmail = "admin@smartvrms.in";
+            // 1. Fetch active company administrators and currently responsible active employees (FR-DOC-003)
+            // Deactivated/revoked employees are strictly excluded.
+            record RecipientTarget(String email, String role) {}
+            List<RecipientTarget> recipients = new ArrayList<>();
             try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT u.email FROM vrms_private.memberships m " +
+                    "SELECT u.email, m.role FROM vrms_private.memberships m " +
                     "JOIN auth.users u ON m.user_id = u.id " +
-                    "WHERE m.company_id = ? AND m.role = 'ADMINISTRATOR' AND m.membership_status = 'ACTIVE' LIMIT 1"
+                    "WHERE m.company_id = ? AND m.membership_status = 'ACTIVE' " +
+                    "AND m.role IN ('ADMINISTRATOR', 'EMPLOYEE') " +
+                    "ORDER BY m.role ASC, u.email ASC"
             )) {
                 ps.setObject(1, session.companyId());
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next()) {
-                        adminEmail = rs.getString("email");
+                    while (rs.next()) {
+                        String email = rs.getString("email");
+                        String role = rs.getString("role");
+                        String outboxRole = "ADMINISTRATOR".equalsIgnoreCase(role) ? "ADMINISTRATOR" : "STAFF_FLEET";
+                        if (email != null && !email.isBlank()) {
+                            recipients.add(new RecipientTarget(email.trim().toLowerCase(), outboxRole));
+                        }
                     }
                 }
+            }
+            if (recipients.isEmpty()) {
+                recipients.add(new RecipientTarget("admin@smartvrms.in", "ADMINISTRATOR"));
             }
 
             // 2. Fetch all vehicle documents
@@ -357,40 +369,7 @@ public class JdbcAutomationService implements AutomationPort {
             }
 
             for (DocToScan doc : docs) {
-                if (doc.expiry == null) {
-                    continue; // Non-expiring documents emit no reminder
-                }
-
-                DocumentReminderScanner.ReminderStage stage = DocumentReminderScanner.evaluateStage(doc.expiry, clockTime);
-                if (stage == DocumentReminderScanner.ReminderStage.NONE) {
-                    continue;
-                }
-
-                String stageName = (stage == DocumentReminderScanner.ReminderStage.LESS_THAN_72H) ? "LESS_THAN_72H" : "EXPIRED";
-
-                // Check if already scanned/sent for this version and stage
-                boolean alreadyDispatched = false;
-                try (PreparedStatement ps = c.prepareStatement(
-                        "SELECT 1 FROM vrms_private.document_reminder_scans " +
-                        "WHERE company_id = ? AND document_id = ? AND document_version = ? AND reminder_stage = ? AND recipient_email = ?"
-                )) {
-                    ps.setObject(1, session.companyId());
-                    ps.setObject(2, doc.id);
-                    ps.setInt(3, doc.version);
-                    ps.setString(4, stageName);
-                    ps.setString(5, adminEmail);
-                    try (ResultSet rs = ps.executeQuery()) {
-                        if (rs.next()) {
-                            alreadyDispatched = true;
-                        }
-                    }
-                }
-
-                if (alreadyDispatched) {
-                    continue;
-                }
-
-                // Invalidate older version pending reminders (supersede)
+                // Invalidate older version pending reminders (supersede) in scan table
                 try (PreparedStatement ps = c.prepareStatement(
                         "UPDATE vrms_private.document_reminder_scans " +
                         "SET superseded = true " +
@@ -402,36 +381,89 @@ public class JdbcAutomationService implements AutomationPort {
                     ps.executeUpdate();
                 }
 
-                // Enqueue reminder outbox message
-                String eventType = (stage == DocumentReminderScanner.ReminderStage.LESS_THAN_72H) ? "EXPIRY_REMINDER_72H" : "EXPIRY_REMINDER_EXPIRED";
-                String key = DocumentReminderScanner.buildIdempotencyKey(session.companyId(), doc.id, doc.version, stage, adminEmail);
-                String subject = (stage == DocumentReminderScanner.ReminderStage.LESS_THAN_72H)
-                        ? "Urgent: Vehicle Document " + doc.docType + " (" + doc.plate + ") Expiring Within 72 Hours"
-                        : "Action Required: Vehicle Document " + doc.docType + " (" + doc.plate + ") Has Expired";
-
-                String payload = "{\"vehicleId\":\"" + doc.vehicleId + "\",\"documentType\":\"" + doc.docType + "\",\"plate\":\"" + doc.plate + "\",\"version\":" + doc.version + "}";
-
-                OutboxMessageRecord outbox = enqueueMessage(
-                        session, eventType, key, adminEmail, "ADMINISTRATOR", subject, "document_reminder", payload, null
-                );
-
-                // Record scan event
+                // Invalidate older version pending outbox messages so workers do not send stale alerts
                 try (PreparedStatement ps = c.prepareStatement(
-                        "INSERT INTO vrms_private.document_reminder_scans " +
-                        "(company_id, document_id, document_version, reminder_stage, recipient_email, outbox_id) " +
-                        "VALUES (?, ?, ?, ?, ?, ?)"
+                        "UPDATE vrms_private.outbox_messages " +
+                        "SET status = 'SUPERSEDED' " +
+                        "WHERE company_id = ? AND status IN ('QUEUED', 'CLAIMED') AND id IN (" +
+                        "  SELECT outbox_id FROM vrms_private.document_reminder_scans " +
+                        "  WHERE company_id = ? AND document_id = ? AND document_version < ? AND outbox_id IS NOT NULL" +
+                        ")"
                 )) {
                     ps.setObject(1, session.companyId());
-                    ps.setObject(2, doc.id);
-                    ps.setInt(3, doc.version);
-                    ps.setString(4, stageName);
-                    ps.setString(5, adminEmail);
-                    ps.setObject(6, outbox.id());
+                    ps.setObject(2, session.companyId());
+                    ps.setObject(3, doc.id);
+                    ps.setInt(4, doc.version);
                     ps.executeUpdate();
                 }
 
-                queuedCount++;
+                if (doc.expiry == null) {
+                    continue; // Non-expiring documents emit no reminder
+                }
+
+                DocumentReminderScanner.ReminderStage stage = DocumentReminderScanner.evaluateStage(doc.expiry, clockTime);
+                if (stage == DocumentReminderScanner.ReminderStage.NONE) {
+                    continue;
+                }
+
+                String stageName = (stage == DocumentReminderScanner.ReminderStage.LESS_THAN_72H) ? "LESS_THAN_72H" : "EXPIRED";
+
+                for (RecipientTarget target : recipients) {
+                    // Check if already scanned/sent for this version and stage
+                    boolean alreadyDispatched = false;
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "SELECT 1 FROM vrms_private.document_reminder_scans " +
+                            "WHERE company_id = ? AND document_id = ? AND document_version = ? AND reminder_stage = ? AND recipient_email = ?"
+                    )) {
+                        ps.setObject(1, session.companyId());
+                        ps.setObject(2, doc.id);
+                        ps.setInt(3, doc.version);
+                        ps.setString(4, stageName);
+                        ps.setString(5, target.email());
+                        try (ResultSet rs = ps.executeQuery()) {
+                            if (rs.next()) {
+                                alreadyDispatched = true;
+                            }
+                        }
+                    }
+
+                    if (alreadyDispatched) {
+                        continue;
+                    }
+
+                    // Enqueue reminder outbox message
+                    String eventType = (stage == DocumentReminderScanner.ReminderStage.LESS_THAN_72H) ? "EXPIRY_REMINDER_72H" : "EXPIRY_REMINDER_EXPIRED";
+                    String key = DocumentReminderScanner.buildIdempotencyKey(session.companyId(), doc.id, doc.version, stage, target.email());
+                    String subject = (stage == DocumentReminderScanner.ReminderStage.LESS_THAN_72H)
+                            ? "Urgent: Vehicle Document " + doc.docType + " (" + doc.plate + ") Expiring Within 72 Hours"
+                            : "Action Required: Vehicle Document " + doc.docType + " (" + doc.plate + ") Has Expired";
+
+                    String payload = "{\"vehicleId\":\"" + doc.vehicleId + "\",\"documentType\":\"" + doc.docType + "\",\"plate\":\"" + doc.plate + "\",\"version\":" + doc.version + "}";
+
+                    OutboxMessageRecord outbox = enqueueMessage(
+                            session, eventType, key, target.email(), target.role(), subject, "document_reminder", payload, null
+                    );
+
+                    // Record scan event
+                    try (PreparedStatement ps = c.prepareStatement(
+                            "INSERT INTO vrms_private.document_reminder_scans " +
+                            "(company_id, document_id, document_version, reminder_stage, recipient_email, outbox_id) " +
+                            "VALUES (?, ?, ?, ?, ?, ?)"
+                    )) {
+                        ps.setObject(1, session.companyId());
+                        ps.setObject(2, doc.id);
+                        ps.setInt(3, doc.version);
+                        ps.setString(4, stageName);
+                        ps.setString(5, target.email());
+                        ps.setObject(6, outbox.id());
+                        ps.executeUpdate();
+                    }
+
+                    queuedCount++;
+                }
             }
+
+            c.commit();
 
         } catch (SQLException e) {
             throw new RuntimeException("Failed to scan document reminders: " + e.getMessage(), e);
@@ -440,10 +472,38 @@ public class JdbcAutomationService implements AutomationPort {
     }
 
     @Override
+    public List<OutboxMessageRecord> listRecentMessages(StaffSession session, int limit) {
+        checkStaff(session);
+        List<OutboxMessageRecord> list = new ArrayList<>();
+        try (Connection c = dataSource.getConnection()) {
+            setContext(c, session, Capability.MANAGE_NOTIFICATIONS);
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id, company_id, event_type, idempotency_key, recipient_email, recipient_role, subject, " +
+                    "template_name, payload_json, attachment_doc_id, status, lease_until, claimed_by, attempts_count, " +
+                    "max_attempts, next_attempt_at, last_attempt_at, last_error, created_at " +
+                    "FROM vrms_private.outbox_messages WHERE company_id = ? " +
+                    "ORDER BY created_at DESC LIMIT ?"
+            )) {
+                ps.setObject(1, session.companyId());
+                ps.setInt(2, Math.max(1, Math.min(100, limit)));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        list.add(mapOutboxRecord(rs));
+                    }
+                }
+            }
+            c.commit();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to list outbox messages: " + e.getMessage(), e);
+        }
+        return list;
+    }
+
+    @Override
     public WorkerHealthStatus getWorkerHealth(StaffSession session) {
         checkStaff(session);
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.MANAGE_NOTIFICATIONS);
 
             int pending = 0;
             int claimed = 0;
@@ -481,7 +541,9 @@ public class JdbcAutomationService implements AutomationPort {
             long oldestSec = (oldest != null) ? Duration.between(oldest, Instant.now()).getSeconds() : 0L;
             boolean isLagging = (pending > 10) || (oldestSec > 3600L);
 
-            return new WorkerHealthStatus(Instant.now(), pending, claimed, failed, accepted, oldestSec, isLagging);
+            WorkerHealthStatus health = new WorkerHealthStatus(Instant.now(), pending, claimed, failed, accepted, oldestSec, isLagging);
+            c.commit();
+            return health;
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get worker health: " + e.getMessage(), e);
         }
@@ -492,7 +554,7 @@ public class JdbcAutomationService implements AutomationPort {
         checkStaff(session);
         List<DeliveryAttemptRecord> list = new ArrayList<>();
         try (Connection c = dataSource.getConnection()) {
-            setContext(c, session);
+            setContext(c, session, Capability.MANAGE_NOTIFICATIONS);
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT id, company_id, outbox_id, attempt_number, started_at, finished_at, provider_name, " +
                     "provider_response_code, provider_message_id, error_message, outcome " +
@@ -520,6 +582,7 @@ public class JdbcAutomationService implements AutomationPort {
                     }
                 }
             }
+            c.commit();
         } catch (SQLException e) {
             throw new RuntimeException("Failed to list delivery attempts: " + e.getMessage(), e);
         }
@@ -550,6 +613,17 @@ public class JdbcAutomationService implements AutomationPort {
                 rs.getString("last_error"),
                 rs.getTimestamp("created_at").toInstant()
         );
+    }
+
+    public static String redactEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "[REDACTED]";
+        }
+        int atIdx = email.indexOf('@');
+        if (atIdx <= 0) {
+            return "[REDACTED]";
+        }
+        return email.charAt(0) + "***@" + email.substring(atIdx + 1);
     }
 
     private static class DocToScan {

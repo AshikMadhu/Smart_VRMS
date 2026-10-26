@@ -28,8 +28,11 @@ public final class ReviewRegressionChecks {
         check(UpdateChecker.newerRelease("0.1.1", release + "0.1.1").isEmpty());
         check(UpdateChecker.newerRelease("0.1.9", release + "0.1.10").isPresent());
         check(UpdateChecker.newerRelease("0.2.0", release + "0.1.99").isEmpty());
+        check(UpdateChecker.newerRelease("0.1.1-preview", release + "0.1.2-preview").isPresent());
+        check(UpdateChecker.newerRelease("0.1.2-preview", release + "0.1.2-preview").isEmpty());
+        check(UpdateChecker.newerRelease("0.1.2-preview", release + "0.1.2").isPresent());
         for (String value : List.of("https://evil.example/releases/tag/v9.0.0", release + "1.0.0?token=x",
-                release + "1.0.0-preview", release + "9999999999999999999999.0.0", "http://github.com/AshikMadhu/Smart_VRMS/releases/tag/v2.0.0"))
+                release + "9999999999999999999999.0.0", "http://github.com/AshikMadhu/Smart_VRMS/releases/tag/v2.0.0"))
             check(UpdateChecker.newerRelease("0.1.1", value).isEmpty());
         Instant pickup = Instant.parse("2026-10-25T00:00:00Z");
         var vehicle = UUID.randomUUID();

@@ -3,6 +3,8 @@ package in.smartvrms.server.domain;
 import in.smartvrms.application.port.AuditPort;
 import in.smartvrms.application.port.OperationsPort;
 import in.smartvrms.contracts.*;
+import in.smartvrms.server.security.Capability;
+import in.smartvrms.server.security.JdbcStaffContext;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -36,7 +38,7 @@ public class JdbcOperationsService implements OperationsPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.CHECKOUT);
 
                 // 1. Lock and load assignment
                 UUID vehicleId;
@@ -177,7 +179,7 @@ public class JdbcOperationsService implements OperationsPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.RECORD_RETURN_INSPECTION);
 
                 // 1. Lock and load assignment and custody
                 UUID vehicleId;
@@ -313,6 +315,7 @@ public class JdbcOperationsService implements OperationsPort {
                     }
 
                     String issueType = cmd.issueType() != null && !cmd.issueType().isBlank() ? cmd.issueType() : "CUSTOMER_DAMAGE";
+                    long allegedRecovery = "ORDINARY_WEAR".equalsIgnoreCase(issueType) ? 0L : Math.max(0, cmd.allegedCustomerRecoveryPaise());
                     try (PreparedStatement ps = c.prepareStatement(
                             "INSERT INTO vrms_private.maintenance_cases " +
                             "(company_id, vehicle_id, assignment_id, custody_id, restriction_id, issue_type, status, " +
@@ -325,7 +328,7 @@ public class JdbcOperationsService implements OperationsPort {
                         ps.setObject(5, restrictionId);
                         ps.setString(6, issueType);
                         ps.setLong(7, Math.max(0, cmd.estimatedRepairCostPaise()));
-                        ps.setLong(8, Math.max(0, cmd.allegedCustomerRecoveryPaise()));
+                        ps.setLong(8, allegedRecovery);
                         ps.setString(9, cmd.damageNotes() != null && !cmd.damageNotes().isBlank() ? cmd.damageNotes() : "Vehicle return inspection damage");
                         ps.setObject(10, cmd.damagePhotoFileId());
                         ps.setObject(11, session.userId());
@@ -518,7 +521,7 @@ public class JdbcOperationsService implements OperationsPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.EXTEND_AT_SAVED_RATES);
 
                 // 1. Collect and sort vehicle and driver IDs for deterministic locking
                 List<UUID> vehicleIds = quote.assignmentDeltas().stream().map(ExtensionQuote.AssignmentDelta::vehicleId).distinct().sorted().toList();
@@ -841,7 +844,7 @@ public class JdbcOperationsService implements OperationsPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.RECORD_MAINTENANCE_EVIDENCE);
 
                 // 1. Create active asset restriction on vehicle
                 UUID restrictionId;
@@ -862,6 +865,7 @@ public class JdbcOperationsService implements OperationsPort {
                 // 2. Insert maintenance case
                 UUID caseId;
                 Instant createdAt;
+                long recovery = "ORDINARY_WEAR".equalsIgnoreCase(type) && !session.isAdministrator() ? 0L : Math.max(0, allegedRecoveryPaise);
                 try (PreparedStatement ps = c.prepareStatement(
                         "INSERT INTO vrms_private.maintenance_cases " +
                         "(company_id, vehicle_id, assignment_id, custody_id, restriction_id, issue_type, status, " +
@@ -875,7 +879,7 @@ public class JdbcOperationsService implements OperationsPort {
                     ps.setObject(5, restrictionId);
                     ps.setString(6, type);
                     ps.setLong(7, Math.max(0, estimatedCostPaise));
-                    ps.setLong(8, Math.max(0, allegedRecoveryPaise));
+                    ps.setLong(8, recovery);
                     ps.setString(9, notes.strip());
                     ps.setObject(10, photoFileId);
                     ps.setObject(11, session.userId());
@@ -901,7 +905,7 @@ public class JdbcOperationsService implements OperationsPort {
 
                 return new MaintenanceCaseRecord(
                         caseId, session.companyId(), vehicleId, assignmentId, custodyId, restrictionId,
-                        type, "OPEN", Math.max(0, estimatedCostPaise), Math.max(0, allegedRecoveryPaise),
+                        type, "OPEN", Math.max(0, estimatedCostPaise), recovery,
                         0, 0, notes.strip(), photoFileId, null, session.userId(), null, createdAt, null
                 );
             } catch (Exception e) {
@@ -926,15 +930,16 @@ public class JdbcOperationsService implements OperationsPort {
         try (Connection c = dataSource.getConnection()) {
             c.setAutoCommit(false);
             try {
-                setContext(c, session);
+                setContext(c, session, Capability.APPROVE_MAINTENANCE_RESOLUTION);
 
                 // 1. Lock and load maintenance case
                 UUID vehicleId;
                 UUID restrictionId;
                 String currentStatus;
+                String issueType;
 
                 try (PreparedStatement ps = c.prepareStatement(
-                        "SELECT vehicle_id, restriction_id, status FROM vrms_private.maintenance_cases " +
+                        "SELECT vehicle_id, restriction_id, status, issue_type FROM vrms_private.maintenance_cases " +
                         "WHERE company_id = ? AND id = ? FOR UPDATE")) {
                     ps.setObject(1, session.companyId());
                     ps.setObject(2, cmd.caseId());
@@ -943,11 +948,18 @@ public class JdbcOperationsService implements OperationsPort {
                         vehicleId = (UUID) rs.getObject(1);
                         restrictionId = (UUID) rs.getObject(2);
                         currentStatus = rs.getString(3);
+                        issueType = rs.getString(4);
                     }
                 }
 
                 if ("RESOLVED".equals(currentStatus)) {
                     throw new IllegalStateException("Maintenance case is already resolved");
+                }
+
+                if ("ORDINARY_WEAR".equalsIgnoreCase(issueType) && cmd.approvedCustomerRecoveryPaise() > 0) {
+                    if (cmd.resolutionNotes() == null || cmd.resolutionNotes().isBlank() || "Maintenance completed".equalsIgnoreCase(cmd.resolutionNotes().strip())) {
+                        throw new IllegalArgumentException("Ordinary wear cannot be charged to customer without explicit responsibility justification and authorized approval");
+                    }
                 }
 
                 // 2. Mark maintenance case RESOLVED
@@ -1171,13 +1183,7 @@ public class JdbcOperationsService implements OperationsPort {
         );
     }
 
-    private static void setContext(Connection c, StaffSession session) throws SQLException {
-        try (PreparedStatement s = c.prepareStatement(
-                "SELECT set_config('vrms.user_id', ?, true), set_config('vrms.company_id', ?, true), set_config('vrms.role', ?, true)")) {
-            s.setString(1, session.userId().toString());
-            s.setString(2, session.companyId().toString());
-            s.setString(3, session.role());
-            s.execute();
-        }
+    private static void setContext(Connection c, StaffSession session, Capability capability) throws SQLException {
+        JdbcStaffContext.require(c, session, capability);
     }
 }
