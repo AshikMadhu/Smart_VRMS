@@ -8,7 +8,7 @@
 ![Windows](https://img.shields.io/badge/Preview-Windows%2011%20x64-2b5b68?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Beta%20preview-d08b36?style=flat-square)
 
-[Download Windows Beta](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.0-preview) · [Release Audit](docs/Release-Audit.md) · [Release Manifest](docs/Release-Manifest.md) · [Requirements](planning/Requirements-and-Verification.csv)
+[Download Windows Beta](https://github.com/AshikMadhu/Smart_VRMS/releases/tag/v0.2.0-preview) · [Release Audit](docs/Release-Audit.md) · [This build's checksums](https://github.com/AshikMadhu/Smart_VRMS/releases/download/v0.2.0-preview/Release-Manifest.md) · [Requirements](planning/Requirements-and-Verification.csv)
 
 </div>
 
@@ -186,7 +186,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-desktop-windows.ps1  
 
 - [Stage 10 Traceability Matrix (90 Requirements)](docs/Stage-10-Traceability-Matrix.md)
 - [Release Audit & Historical Evidence](docs/Release-Audit.md)
-- [Release Manifest & Exact Checksums](docs/Release-Manifest.md)
+- [Release Manifest & Exact Checksums](https://github.com/AshikMadhu/Smart_VRMS/releases/download/v0.2.0-preview/Release-Manifest.md)
 - [User Guide](docs/User-Guide.md)
 - [Developer Guide](docs/Developer-Guide.md)
 - [Operator & Deployment Guide](docs/Operator-and-Deployment-Guide.md)
